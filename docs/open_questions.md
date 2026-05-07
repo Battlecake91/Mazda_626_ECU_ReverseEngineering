@@ -1,118 +1,61 @@
-# Open Questions and Next Steps
+# Open Questions and Next Targets
 
-## Highest-priority hardware questions
+## CPU / firmware model
 
-1. What exactly is `IC1 SC402617FN`?
-   - Main MCU is likely, but the exact CPU core and memory map model are still unknown.
+| Question | Why it matters | Suggested next step |
+|---|---|---|
+| Is `IC1 = SC402617FN` truly HC11-compatible or only HC11-like? | Determines disassembly accuracy | Compare reset vectors, opcodes, interrupt behavior, and bus timing |
+| What is the correct ROM base address? | Required for valid code references | Derive from reset vector and chip-select logic |
+| Are any ROM regions mirrored? | Prevents false xrefs and wrong labels | Check decode width and address-line use |
 
-2. What are all `IC17 74HC138` inputs and enables?
-   - This is essential for decoding chip selects.
+## Memory map
 
-3. What are all `IC17` output destinations?
-   - Known partial outputs exist, but the full decoder map is needed.
+| Question | Suggested next step |
+|---|---|
+| Exact RAM address range? | Probe `IC10` chip-select and correlate firmware RAM references |
+| Exact PIA/PTM register ranges? | Trace `IC17` outputs and firmware access addresses |
+| Does `IC3` occupy a single address or range? | Capture `IC17:13` and `/OE` during reads |
+| Which addresses are write-only outputs? | Correlate writes with SE123 and 74HC595 activity |
 
-4. What is the exact behavior of `IC20` gates 3 and 4?
-   - Gate 1 and gate 2 are partly understood.
-   - Gate 4 likely inverts an `IC17` output into EPROM enable behavior.
+## IC17 / IC20 logic
 
-5. What is the true function of the `SE123` devices?
-   - Output driver is likely, but pin function and electrical topology need proof.
+| Question | Suggested next step |
+|---|---|
+| How exactly do `IC20:12/13`, `IC20:11`, `IC17:4`, `R56`, and any `IC1:14` relation fit together? | Re-probe and redraw that gate with correct 74HC00 pinout |
+| Does `IC20:3` match read-cycle `/OE` timing? | Capture `R/W`, `E`, and `/OE` with logic analyzer |
+| Is `IC20:6` really connected to `IC1:19`, and how does this coexist with `A10`? | Check for net-name collision or tracing error |
 
-6. What is `IC6 151821-0020`?
-   - Its relation to `IC500` and the `IC3` input buffer is important.
+## IC6 / IC500 level shifter
 
-## Suggested tracing tasks
+| Question | Suggested next step |
+|---|---|
+| Are outputs open collector/open drain or push-pull? | Measure with pull-up/pull-down and current limiting |
+| What does `IC6:22` sense in the ECU? | Trace input path and compare with firmware reads |
+| Which external signals feed `IC500`? | Trace ribbon connector and connector pins |
+| Which channels are ground-detect vs +12 V-detect in this ECU? | Bench-test each channel safely |
 
-### IC17 complete mapping
+## SE123 output drivers
 
-Trace:
+| Question | Suggested next step |
+|---|---|
+| Are SE123 outputs low-side sinks, high-side drivers, or open-collector outputs? | Dummy-load test with current-limited supply |
+| Does the logic-side-to-output-side pin mirror hold for every channel? | Toggle known control pins and measure output pins |
+| What vehicle functions correspond to `A1`, `A9`, `A10`, `B12`, `C4`, `C11`, `C12`, `C19`, `C20`, `D12..D19`? | Use wiring diagrams and connector probing |
 
-- Inputs `A`, `B`, `C`
-- Enables `G1`, `/G2A`, `/G2B`
-- Outputs `/Y0..Y7`
-- Each output destination
+## Ghidra / firmware
 
-Create a truth table once input sources are known.
+| Question | Suggested next step |
+|---|---|
+| What does `0x2401 bit 7` control or report? | Track all xrefs and probe `IC4` pins during state changes |
+| What are `DAT_0049`, `DAT_0192`, `DAT_019B`, and `MEAS_ENABLE_FLAGS_67`? | Track writes, initialization, and branch-dependent behavior |
+| Which routines write to output-driver control pins? | Find store instructions into decoded I/O ranges |
+| Which routines read external inputs through `IC3`? | Find reads from `IC3` selected address range |
 
-### ROM/RAM control validation
+## Documentation TODO
 
-Measure or trace:
-
-- `IC11 /CE`
-- `IC11 /OE`
-- `IC10 CE1/CE2` depending on exact pin names
-- `IC10 /OE`
-- `IC10 R/W`
-- `IC20 pin 3`
-- `IC20 pin 11`
-
-### Bus timing capture
-
-Use a logic analyzer on:
-
-- `E` / bus-enable net
-- `R/W` net
-- Global `/OE`
-- At least some address lines
-- At least some data lines
-- One chip select line at a time
-
-## Suggested firmware tasks
-
-1. Identify all direct accesses to addresses in `0x2000..0x2FFF`.
-2. Identify repeated bit-test operations such as `BRSET` / `BRCLR` around suspected peripheral addresses.
-3. Create provisional labels for hardware-backed locations.
-4. Compare firmware access patterns against IC17 chip select hypotheses.
-5. Use hardware traces to confirm address ranges.
-
-## Suggested repository structure
-
-```text
-KLDE_ECU_Reverse/
-├── README.md
-├── docs/
-│   ├── board_overview.md
-│   ├── ic_inventory.md
-│   ├── ic1_pin_mapping.md
-│   ├── external_bus_memory.md
-│   ├── chip_select_glue_logic.md
-│   ├── peripherals.md
-│   ├── se123_driver_devices.md
-│   ├── connectors_and_signals.md
-│   ├── firmware_analysis.md
-│   └── open_questions.md
-├── hardware/
-│   ├── photos/
-│   ├── schematics_partial/
-│   └── netlists/
-├── firmware/
-│   ├── dumps/
-│   ├── ghidra_notes/
-│   └── labels/
-├── captures/
-│   ├── logic_analyzer/
-│   └── oscilloscope/
-└── tools/
-    ├── sigrok/
-    └── python/
-```
-
-## Suggested commit order
-
-1. Add documentation skeleton.
-2. Add raw photos and board reference images.
-3. Add ROM dump and checksum metadata, if legally and practically okay for private use.
-4. Add partial netlists.
-5. Add Ghidra labels and comments separately from raw firmware dumps.
-6. Add scripts only after they have a clear purpose.
-
-## Documentation rule
-
-Every finding should ideally include:
-
-- Source: continuity test, datasheet, visual inspection, logic analyzer, firmware reference.
-- Confidence: verified, likely, hypothesis.
-- Date or revision.
-- Any contradiction or earlier wrong assumption.
-
-Reverse engineering is mostly archaeology, except the pottery has 80 pins and lies to you.
+- Add exact HC11 Ghidra processor module repository name.
+- Add ROM checksum / dump hash.
+- Add photos or annotated board images.
+- Add connector pin table with direction and expected voltage.
+- Add verified memory map table.
+- Add firmware label export from Ghidra.

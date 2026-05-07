@@ -1,69 +1,53 @@
 # Board Overview
 
-## Project goal
+## ECU / PCB identification
 
-The goal is to reverse engineer the ECU hardware well enough to build a reliable firmware and I/O map. The current board appears to use a main MCU/custom CPU with an external 8-bit data bus, external EPROM, external SRAM, peripheral ICs, address decoding logic and custom Denso driver devices.
+| Item | Value | Notes | Confidence |
+|---|---|---|---:|
+| Control Unit marking | `U2103136866B` | Marking found on the ECU / control unit | High |
+| ECU readable family mark | `KL05` | Only this part is readable; the remaining serial / part number is scratched | High |
+| Denso / PCB / sub-board number | `079721-3521` | Likely related to switching stages, voltage dividers, or an interface sub-board | High |
+| Crystal | `8 MHz` | `X1` | High |
 
-## High-level architecture
+## Architecture summary
 
-```text
-                 +----------------------+
-                 | IC1 SC402617FN       |
-                 | Main MCU / CPU       |
-                 +----------+-----------+
-                            |
-        Address bus Adr0..Adr14, data bus IO0..IO7
-                            |
-        +-------------------+--------------------+
-        |                   |                    |
-+-------+------+    +-------+------+     +-------+------+
-| IC11 27C256  |    | IC10 TC5564  |     | IC3 74HC541 |
-| EPROM 32 KiB |    | SRAM 8 KiB   |     | Input buffer |
-+--------------+    +--------------+     +--------------+
-        |                   |                    |
-        +-------------------+--------------------+
-                            |
-                   +--------+--------+
-                   | Glue logic      |
-                   | IC17, IC20 etc. |
-                   +--------+--------+
-                            |
-        +-------------------+--------------------+
-        |                   |                    |
-+-------+------+    +-------+------+     +-------+------+
-| IC4 HD63BP21 |    | IC7 HD63B40  |     | IC5/IC800   |
-| PIA          |    | Peripheral   |     | SE123       |
-+--------------+    +--------------+     +--------------+
-```
+The board appears to be a Denso ECU with a custom main controller and an external 8-bit bus.
 
-## Known clocking
+Known bus devices:
 
-- `X1` is an 8 MHz crystal.
-- `IC7 pin 17` is `E` / system clock.
-- The same `E`-like signal is shared with `IC4 pin 25`, `IC10 pin 26` and through `F4` to `IC1 pin 48`.
+| Device | RefDes | Function |
+|---|---|---|
+| Main controller / custom MCU | `IC1 = SC402617FN` | Main CPU/controller, external bus master |
+| ROM | `IC11 = 27C256` | 32 KiB EPROM / firmware ROM |
+| RAM | `IC10 = TC5564APL` | 8 KiB SRAM |
+| Peripheral / PIA | `IC4 = HD63BP21P` | Parallel I/O device, Motorola bus style |
+| Peripheral / timer | `IC7 = HD63B40P` | Timer / peripheral device, Motorola bus style |
+| Bus buffer | `IC3 = 74HC541` | External input buffer onto the data bus |
+| Address decoder | `IC17 = 74HC138AP` | Chip-select generation |
+| Glue logic | `IC20 = 74HC00AP` | Read-output-enable and additional logic |
 
-## Memory devices
+## Functional blocks
 
-- `IC11` is a `27C256`, 32 KiB EPROM.
-- `IC10` is a `TC5564APL`, 8 KiB SRAM.
-- ROM and RAM share the lower address bus and data bus.
+| Block | ICs / parts | Current interpretation |
+|---|---|---|
+| CPU / bus master | `IC1` | Custom MCU or ASIC using external ROM/RAM and memory-mapped I/O |
+| Program memory | `IC11` | 27C256, likely full 32 KiB firmware image |
+| External RAM | `IC10` | TC5564, likely variables, stack, and buffers |
+| Address decoding | `IC17`, `IC20` | 74HC138 plus NAND glue logic |
+| Input conditioning | `IC6`, `IC500` | Denso comparator / 12 V-to-5 V level-shifter ICs |
+| Output stages | `IC5`, `IC800` | SE123, likely multi-channel low-side/open-collector-style drivers |
+| Analog mux / op amp | `IC13`, `IC21` | Sensor multiplexing / analog conditioning |
+| Logic / latch / buffer | `IC3`, `IC8`, `IC9`, `IC20` | Bus buffer, shift register, flip-flop, glue logic |
 
-## Peripheral and I/O devices
+## Documentation conventions
 
-- `IC4 HD63BP21P` provides parallel I/O and interrupt/control pins.
-- `IC7 HD63B40P` is connected to bus/control signals and likely participates in timing or peripheral functions.
-- `IC3 74HC541` buffers external or secondary-board signals onto the data bus.
-- `IC5` and `IC800` marked `SE123` are likely custom multi-channel driver devices.
-- `IC6` and `IC500` appear to be related custom Denso devices.
+- `ICx:pin` means reference designator and pin number.
+- `A0..A14` are external address-bus lines unless explicitly stated otherwise.
+- `IO0..IO7` are external data-bus lines.
+- `A1..A20`, `B1..B20`, `C1..C20`, `D1..D20` are ECU connector pins unless context says otherwise.
+- Active-low signals use `/`, for example `/OE`, `/CE`, `/Y5`.
+- `n.b.` means not populated.
 
-## Current working assumptions
+## Caution
 
-1. `IC1` is the main bus master.
-2. `IC11`, `IC10`, `IC3`, `IC4` and `IC7` are bus-accessible devices or closely tied to bus cycles.
-3. `IC17 74HC138` generates multiple active-low chip select lines.
-4. `IC20 74HC00` combines `R/W` and `E` or bus-enable style signals to generate a global read output-enable signal.
-5. `SE123` devices are not simple logic ICs. Their pinout and 12 V pin suggest output driver behavior.
-
-## Repository purpose
-
-This repository is meant to preserve findings in a structured way so that future analysis does not repeatedly rediscover the same mistakes, because apparently silicon enjoys being cryptic and humans enjoy tracing it twice.
+Several parts are Denso-custom or poorly documented. These notes deliberately separate traced facts from hypotheses, because one confident wrong assumption can eat a weekend and then ask for dessert.

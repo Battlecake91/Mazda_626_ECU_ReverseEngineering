@@ -1,91 +1,95 @@
 # Firmware Analysis Notes
 
-## Current tool context
+## Current analysis model
 
-Firmware analysis is being performed in Ghidra. Hardware findings should be used to improve memory maps, peripheral labels and variable interpretation.
+The firmware is analyzed as HC11-like Motorola 8-bit code in Ghidra using a third-party HC11 / 68HC11 language module.
 
-## Known code reference around 0x998E
+This is a useful working model, not yet final proof of the exact `IC1` CPU core.
 
-A reset/service routine around address `0x998E` accesses `0x2401`:
+## ROM
+
+| Item | Value |
+|---|---|
+| Physical ROM | `IC11 = 27C256` |
+| Size | 32 KiB |
+| Data width | 8 bit |
+| Address pins | `A0..A14` |
+
+## Known code/variable observations
 
 ```asm
-RESET_SERVICE_998E:
-998e  ce 24 01      LDX   #0x2401
-9991  1e 00 80 08   BRSET 0x0,IX => DAT_2401,0x80,LAB_999d
-9995  ce 24 01      LDX   #0x2401
+BRCLR  DAT_0049,0x1,LAB_bf78
+LDAA   DAT_019b
+BNE    LAB_bf8a
+
+LAB_bf78:
+LDAA   DAT_0192
+BRSET  MEAS_ENABLE_FLAGS_67,0x10,LAB_bf82
+LDAA   DAT_8249 ; = 0x1F
 ```
 
-Important note:
+| Symbol / address | Meaning / hypothesis | Confidence |
+|---|---|---:|
+| `DAT_0049 bit 0` | Conditional flag controlling branch path | Medium |
+| `DAT_019B` | RAM variable checked for non-zero | Medium |
+| `DAT_0192` | RAM variable used in fallback/default path | Medium |
+| `MEAS_ENABLE_FLAGS_67 bit 0x10` | Measurement/mode-enable flag | Medium |
+| `DAT_8249 = 0x1F` | ROM constant or calibration byte | Medium |
+| `0x2401 bit 7` | Interesting PIA/peripheral bit under investigation | Medium |
 
-- `RAM_EXT` was already assigned to `0x2000..0x2FFF`.
-- `0x2401` falls inside that range.
-- This may be real RAM, memory-mapped peripheral space, mirrored space, or a misidentified region.
+## Function creation policy
 
-Do not blindly treat every access in `0x2000..0x2FFF` as normal RAM until the address decode is proven. That is exactly how one earns a haunted Ghidra project.
+1. Use labels freely.
+2. Create functions only at credible entry points.
+3. Prefer semantic labels once behavior is known.
+4. Avoid over-typing data tables as code.
 
-## Existing label note
+Recommended naming style:
 
-- `SUB_99AC` is already named `ADC_PHASE_FLAGS_59`.
+```text
+SUB_xxxx                  ; unknown but callable subroutine
+INIT_xxx                  ; initialization routine
+READ_xxx                  ; read routine
+UPDATE_xxx                ; periodic update routine
+PIA_xxxx_BITn_TODO        ; hardware bit under investigation
+DAT_xxxx                  ; unknown RAM/ROM data
+CAL_xxxx                  ; likely calibration data
+```
 
-## Hardware hints relevant to firmware mapping
+## Hardware correlation workflow
 
-### Motorola-style bus hints
+For every interesting firmware access:
 
-The presence of:
+1. Record address and bit mask.
+2. Determine whether the address is ROM, RAM, or I/O.
+3. Check cross-references in Ghidra.
+4. Map to decoded chip-select if possible.
+5. Probe corresponding physical pin or connector net.
+6. Rename symbol only after behavior is plausible.
 
-- `R/W`
-- `E` / system clock
-- `HD63BP21P`
-- `HD63B40P`
+## High-value targets
 
-suggests a Motorola-like bus timing model. This may help when interpreting firmware architecture and peripheral behavior.
-
-### Devices likely visible on the data bus
-
-The following devices are most likely connected to the external data bus or externally readable/writable bus space:
-
-| Device | Reason |
+| Target | Why it matters |
 |---|---|
-| IC11 27C256 EPROM | Program/data ROM on data bus |
-| IC10 TC5564 SRAM | External RAM on data bus |
-| IC3 74HC541 | Outputs connected to D0-D7 and gated by address decode plus `/OE` |
-| IC4 HD63BP21P | Bus-style peripheral with R/W and E/control lines |
-| IC7 HD63B40P | Bus-style peripheral with E/system clock and R/W/control lines |
-| Possibly IC8/IC9 logic paths | Could expose latched output or status behavior indirectly |
+| Reset vector and startup routine | Determines ROM base and CPU execution model |
+| `0x2401 bit 7` | Likely PIA-related hardware behavior |
+| Writes to SE123 control pins | Output-driver mapping to actuators |
+| Reads through `IC3` | External switch / diagnostic input mapping |
+| `IC6:22` comparator path | May be power, ignition, diagnostic, or threshold input |
+| RAM variables around `0x0049`, `0x0067`, `0x0192`, `0x019B` | Control flags and runtime state |
 
-## Suggested Ghidra workflow
+## Logic analyzer idea
 
-1. Keep raw hardware names in labels first, for example `PORT_IC4_PIA_B`, `REG_IC7_UNKNOWN_00`, `INPUT_IC3_BUFFER`.
-2. Create a separate note for inferred semantic names, for example `ADC_PHASE_FLAGS`.
-3. Mark all guessed addresses with a confidence tag in comments.
-4. When a hardware address is confirmed by chip select tracing, rename it from unknown to a stable label.
-5. Keep `RAM_EXT` conservative until the full decode is known.
+A DSLogic Plus with `sigrok-cli` can be used to watch the external bus or selected chip-select/control lines.
 
-## Logic analyzer watcher idea
+Useful signals:
 
-A DSLogic Plus with `sigrok-cli` and Python can be used to build a watcher for external RAM or I/O access patterns.
+- `E` / bus-enable line,
+- `R/W`,
+- global `/OE`,
+- `IC17` outputs,
+- selected address lines,
+- selected data-bus bits,
+- SE123 control pins.
 
-Possible capture targets:
-
-- Address lines needed for target region detection.
-- Data bus `IO0..IO7`.
-- `R/W` net.
-- `E` / bus-enable net.
-- Global `/OE` from `IC20 pin 3`.
-- Specific chip select lines from `IC17`.
-
-The practical challenge is channel count. Full address + full data + control lines requires many channels. For early work, capture a subset:
-
-- `E`
-- `R/W`
-- selected high address lines
-- one or two chip select lines
-- data bus if enough channels are available
-
-## Open firmware questions
-
-- What CPU core or instruction set exactly matches `SC402617FN`?
-- Is the external EPROM directly executable code, lookup data, calibration data, or a mixture?
-- Where exactly are reset vectors located?
-- Which addresses select IC3, IC4, IC7, RAM and ROM?
-- Is `0x2401` RAM, I/O, or a mirrored/register-like location?
+Start small: `E`, `R/W`, one chip-select, and a few address/data lines. Capturing the whole universe at once is how humans invent new kinds of disappointment.

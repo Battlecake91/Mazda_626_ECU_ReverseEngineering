@@ -2,71 +2,62 @@
 
 ## Main IC list
 
-| Reference | Device / marking | Package / notes | Current role |
-|---|---|---|---|
-| IC1 | SC402617FN | Large MCU/custom IC | Main CPU / bus master |
-| IC3 | 74HC541 | Octal buffer | Data bus input buffer |
-| IC4 | HD63BP21P | PIA-type peripheral | Parallel I/O / interrupt control |
-| IC5 | SE123 | DIP-24 | Custom driver device, chip 1 |
-| IC6 | 151821-0020 | Custom Denso IC | Unknown peripheral / interface |
-| IC7 | HD63B40P | Hitachi peripheral | Bus-connected peripheral/timer candidate |
-| IC8 | 74HC595 | Shift register | Serial-to-parallel output expansion |
-| IC9 | 74HC74AP | Dual D flip-flop | State/control logic |
-| IC10 | TC5564APL | SRAM | 8 KiB external RAM |
-| IC11 | 27C256 | EPROM | 32 KiB external program/data ROM |
-| IC13 | TC4051BP | Analog mux | Analog signal multiplexing |
-| IC17 | 74HC138AP | 3-to-8 decoder | Chip select decoding |
-| IC20 | 74HC00AP | Quad NAND | Bus/control glue logic |
-| IC21 | TLC272 | Dual op amp | Analog signal conditioning |
-| IC800 | SE123 | DIP-24 | Custom driver device, chip 2 |
-| X1 | 8 MHz crystal | Clock component | MCU clock source |
+| RefDes | Part marking | Known / likely function | Confidence |
+|---|---|---|---:|
+| `IC1` | `SC402617FN` | Main MCU or Denso custom controller | Medium |
+| `IC3` | `74HC541` | Octal tri-state input buffer onto data bus | High |
+| `IC4` | `HD63BP21P` | PIA-style parallel I/O peripheral | High |
+| `IC5` | `SE123` | Denso custom multi-channel output driver | Medium |
+| `IC6` | `151821-0020` / `D151821-0020` | Denso comparator / level-shifter IC | Medium-High |
+| `IC7` | `HD63B40P` | Motorola-style timer/peripheral IC | High |
+| `IC8` | `74HC595` | Serial-in parallel-out shift register | High |
+| `IC9` | `74HC74AP` | Dual D flip-flop | High |
+| `IC10` | `TC5564APL` | 8 KiB SRAM | High |
+| `IC11` | `27C256` | 32 KiB EPROM / firmware ROM | High |
+| `IC13` | `TC4051BP` | 8-channel analog multiplexer | High |
+| `IC17` | `74HC138AP` | 3-to-8 decoder / chip-select logic | High |
+| `IC20` | `74HC00AP` | Quad NAND glue logic | High |
+| `IC21` | `TLC272` | Dual op amp | High |
+| `IC800` | `SE123` | Denso custom multi-channel output driver | Medium |
+| `X1` | `8 MHz` | Main crystal | High |
 
-## Memory and bus ICs
+## Passive / surrounding parts of interest
 
-### IC10: TC5564APL SRAM
+### SE123 / output-stage neighborhood
 
-- 8 KiB static RAM.
-- Shares address lines with ROM up to at least `A12`.
-- Uses `CE2`, `/OE` and `R/W` style control.
-- Known relevant pins:
-  - `IC10 pin 19` connected to `IC11 pin 19` and `IC4 pin 26` context.
-  - `IC10 pin 22` is `/OE`, connected to global `/OE` line through `F2` / `IC20 pin 3`.
-  - `IC10 pin 26` is `CE2`, connected to the `E`/bus-enable net.
-  - `IC10 pin 27` is `R/W`, connected to the `R/W` net.
+| Part | Value / marking | Notes |
+|---|---|---|
+| `R29`, `R15`, `R87`, `R85`, `R75`, `R20`, `R5`, `R82`, `R83`, `R84`, `R601`, `R602`, `R56`, `R613`, `R611` | `10 kΩ`, 0805 | Around SE123 / related logic |
+| `R891` | `330 Ω`, 0805 | Near output circuitry |
+| `R612` | `75 kΩ`, 0805 | Near output circuitry |
+| `RA1` | `16B25K/50K` | Resistor network |
+| `C95` | `4.7 µF`, tantalum | Supply / filtering |
+| `C17` | not populated | 0805 footprint |
+| `C20`, `C21`, `C4` | unknown | 0805 capacitors |
 
-### IC11: 27C256 EPROM
+### Other known resistor groups
 
-- 32 KiB EPROM.
-- Known datasheet pin mapping:
-  - `pin 3..10` = `A7..A0`
-  - `pin 11..13` = `O0..O2`
-  - `pin 15..19` = `O3..O7`
-  - `pin 19` = `O7`
-  - `pin 20` = `/CE` or `/PGM`
-  - `pin 21` = `A10`
-  - `pin 22` = `/OE`
-  - `pin 23` = `A11`
-  - `pin 24` = `A9`
-  - `pin 25` = `A8`
-  - `pin 26` = `A13`
-  - `pin 27` = `A14`
+| Value | Parts |
+|---|---|
+| `10 kΩ`, 0805 | `R68`, `R59`, `R64`, `R65`, `R66`, `R67`, `R70`, `R71`, `R69`, `R60`, `R61`, `R62`, `R63`, `R4`, `R58`, `R3`, `R57`, `R6`, `R10`, `R11`, `R9`, `R8`, `R7`, `R2`, `R13`, `R18`, `R14`, `R48`, `R49`, `R50`, `R52`, `R55`, `R51`, `R53`, `R54`, `R73`, `R97`, `R98`, `R22`, `R23`, `R30`, `R19`, `R17`, `R16`, `R21`, `R155`, `R38`, `R39`, `R40`, `R36`, `R35`, `R34`, `R33`, `R605`, `R25`, `R31`, `R32`, `R28` |
+| `1 kΩ`, 0805 | `R606`, `R44`, `R45`, `R46`, `R47`, `R96` |
+| `75 kΩ`, 0805 | `R95` |
+| `5.1 kΩ`, 0805 | `R43`, `R99`, `R100` |
+| `4.7 kΩ`, 0805 | `R1` |
+| `1 MΩ`, 0805 | `R607` |
+| `43 kΩ`, 0805 | `R101` |
+| not populated | `R37`, `R42`, `R41` |
 
-### IC3: 74HC541
+### Unknown / not-yet-measured capacitors
 
-- Output pins `11..18` are connected to data bus `D0..D7` / `IO0..IO7`.
-- Inputs come from local logic and from a flat-flex connection to the second board.
-- The device is likely memory-mapped through `IC17` and enabled only during read cycles.
+Unknown 0805 capacitors currently noted:
 
-## Custom / unknown ICs
+`C35`, `C31`, `C34`, `C3`, `C23`, `C25`, `C14`, `C999`, `C13`, `C36`, `C9`, `C6`, `C10`, `C7`, `C22`, `C133`, `C131`, `C27`, `C16`, `C18`, `C19`, `C134`, `C135`, `C15`, `C080`, `C1`, `C2`.
 
-### SE123: IC5 and IC800
+Not populated:
 
-Current hypothesis: custom Denso multi-channel output driver, likely low-side or open-collector/open-drain style with logic-side pins and 12 V/output-side pins.
+`C992`, `C989`, `C998`, `C995`, `C996`, `C991`, `C990`.
 
-See [SE123 driver devices](se123_driver_devices.md).
+### SOT23-like parts with `C3` marking
 
-### IC6 / IC500: 151821-0020
-
-- `IC6` is on the main board.
-- `IC500` appears on the second board and is described as functionally or physically similar to `IC6`.
-- Several `IC3` input lines route through the connector to `IC500`, suggesting secondary-board signals are buffered onto the main data bus.
+`D133`, `D131`, `D132`, `D134`, `D135`, `D137`, `D95`.

@@ -1,63 +1,44 @@
 # KLDE ECU Reverse Engineering
 
-Reverse engineering notes for a Denso-style ECU using an external EPROM, SRAM, peripheral ICs, glue logic and custom driver devices.
+Reverse-engineering notes for a Mazda KL-series / KLDE-related Denso ECU.
 
-This repository collects the current hardware findings, signal tracing notes and working hypotheses. Nothing here should be treated as final unless explicitly marked as verified. This is a reverse-engineering project, not a polished datasheet handed down from the gods, sadly.
+## Known identifiers
 
-## Current focus
-
-- Identify the CPU / main MCU architecture and external bus behavior.
-- Map the external address and data bus.
-- Decode ROM, RAM and peripheral chip select logic.
-- Identify custom Denso ICs and output driver stages.
-- Build a reliable memory and I/O map for firmware analysis.
-- Correlate Ghidra disassembly with hardware address decoding.
-
-## Main board IC overview
-
-| Reference | Marking / Type | Current interpretation |
-|---|---|---|
-| IC1 | SC402617FN | Main MCU or custom mask MCU, likely CPU with external bus |
-| IC3 | 74HC541 | Octal buffer connected to data bus D0-D7 |
-| IC4 | HD63BP21P | PIA-style peripheral interface |
-| IC5 | SE123 | Custom Denso multi-channel driver device, chip 1 |
-| IC6 | 151821-0020 | Likely custom Denso device |
-| IC7 | HD63B40P | Peripheral/timer device, has E/system clock input |
-| IC8 | 74HC595 | Serial-in parallel-out shift register |
-| IC9 | 74HC74AP | Dual D flip-flop |
-| IC10 | TC5564APL | 8 KiB SRAM |
-| IC11 | 27C256 | 32 KiB EPROM |
-| IC13 | TC4051BP | Analog multiplexer |
-| IC17 | 74HC138AP | 3-to-8 decoder, chip select generation |
-| IC20 | 74HC00AP | Quad NAND gate, bus control / glue logic |
-| IC21 | TLC272 | Dual operational amplifier |
-| IC800 | SE123 | Custom Denso multi-channel driver device, chip 2 |
-| X1 | 8 MHz crystal | MCU clock source |
+| Marking / identifier | Context | Confidence |
+|---|---|---:|
+| `U2103136866B` | Control Unit marking | High |
+| `KL05` | Only readable part of the ECU part/family marking; the rest is scratched | High |
+| `079721-3521` | Denso / PCB / sub-board number, likely related to switching stages, voltage dividers, or an interface board | High |
+| `X1 = 8 MHz` | Main crystal | High |
 
 ## Documentation index
 
-- [Board overview](docs/board_overview.md)
-- [IC inventory](docs/ic_inventory.md)
-- [Main MCU IC1 pin mapping](docs/ic1_pin_mapping.md)
-- [External bus and memory system](docs/external_bus_memory.md)
-- [Chip select and glue logic](docs/chip_select_glue_logic.md)
-- [Peripheral devices](docs/peripherals.md)
-- [SE123 driver devices](docs/se123_driver_devices.md)
-- [Connector and signal notes](docs/connectors_and_signals.md)
-- [Firmware analysis notes](docs/firmware_analysis.md)
-- [Open questions and next steps](docs/open_questions.md)
+| File | Purpose |
+|---|---|
+| [`docs/board_overview.md`](docs/board_overview.md) | ECU identity and architecture overview |
+| [`docs/ic_inventory.md`](docs/ic_inventory.md) | IC list and passive parts of interest |
+| [`docs/ic1_pin_mapping.md`](docs/ic1_pin_mapping.md) | Main controller / custom MCU pin mapping |
+| [`docs/external_bus_memory.md`](docs/external_bus_memory.md) | External address/data bus, ROM/RAM wiring, memory map assumptions |
+| [`docs/chip_select_glue_logic.md`](docs/chip_select_glue_logic.md) | 74HC138 / 74HC00 chip-select and `/OE` logic |
+| [`docs/peripherals.md`](docs/peripherals.md) | HD63BP21P / HD63B40P and peripheral notes |
+| [`docs/ic6_ic500_level_shifter.md`](docs/ic6_ic500_level_shifter.md) | Denso `151821-0020` / `D151821-0020` level-shifter/comparator notes |
+| [`docs/se123_driver_devices.md`](docs/se123_driver_devices.md) | SE123 output-driver hypothesis and pin mapping |
+| [`docs/connectors_and_signals.md`](docs/connectors_and_signals.md) | Connector nets and traced external signals |
+| [`docs/ghidra_hc11_setup.md`](docs/ghidra_hc11_setup.md) | Ghidra setup, HC11 processor module, labels, and workflow |
+| [`docs/firmware_analysis.md`](docs/firmware_analysis.md) | Current firmware-analysis notes and variable labels |
+| [`docs/open_questions.md`](docs/open_questions.md) | Known unknowns and next reverse-engineering targets |
 
-## Conventions
+## Current working model
 
-- `Adr0..Adr14` are external address bus lines.
-- `IO0..IO7` are external data bus lines.
-- Connector names such as `A1`, `B8`, `C20`, `D19` refer to ECU external connector pins unless otherwise noted.
-- Signals with `/` prefix are active-low, for example `/OE`, `/CE`.
-- `n.b.` means not populated.
-- `F1..F4` are currently treated as trace jumpers, filter elements, fusible links or similar series elements until identified.
+The ECU appears to use a Motorola-style external bus architecture:
 
-## Confidence levels
+- `IC1 = SC402617FN` is the main custom controller / MCU-like bus master.
+- `IC11 = 27C256` is a 32 KiB external EPROM.
+- `IC10 = TC5564APL` is external SRAM.
+- `IC17 = 74HC138` decodes chip-selects from high address lines.
+- `IC20 = 74HC00` generates a shared active-low read `/OE` from `R/W` and `E`-like bus signals.
+- `IC4 = HD63BP21P` and `IC7 = HD63B40P` are Motorola-bus-style peripherals.
+- `IC6` / `IC500 = 151821-0020` are Denso comparator / 12 V-to-5 V level-shifter ICs.
+- `IC5` / `IC800 = SE123` are probably Denso multi-channel output drivers.
 
-- **Verified:** confirmed by continuity tracing, datasheet pinout and consistent circuit context.
-- **Likely:** strongly suggested by tracing and known IC behavior.
-- **Hypothesis:** plausible but still needs measurement or additional tracing.
+The firmware is currently analyzed in Ghidra using an HC11-like processor/language module. This is useful and plausible, but not yet final proof that `IC1` is an off-the-shelf HC11. Naturally, the most important chip wears the least useful marking, because the universe has a sense of humor and it hates documentation.
