@@ -1,126 +1,110 @@
-# Ghidra HC11 Setup and Firmware Analysis Workflow
+# Ghidra HC11 Setup
 
-## Purpose
+## Goal
 
-This file documents the current Ghidra setup used for analyzing the KLDE / KL05 Denso ECU firmware ROM.
+Use Ghidra to analyze the ECU ROM image as an HC11-like firmware target.
 
-The firmware is stored in `IC11 = 27C256`, so the raw image size is expected to be 32 KiB.
+The exact MCU is currently treated as `SC402617FN`, likely Denso-custom or HC11-derived enough for HC11-style disassembly workflows.
 
-## Processor / language module
+## Processor / Language Module
 
-Current analysis uses a third-party Motorola HC11 / 68HC11 processor module for Ghidra.
+A third-party Ghidra processor / language module for Motorola `MC68HC11` / `68HC11` was used.
 
-Documented as used:
+Exact library repository / release name: **TODO: add exact source URL or package name**.
 
-```text
-Ghidra processor/language module for Motorola MC68HC11 / 68HC11
-```
+Do not replace this with a guessed repository name. Reverse engineering already has enough fiction.
 
-Exact library / repository name:
+## Import Settings
 
-```text
-TODO: add exact GitHub repository or release name used locally
-```
-
-Reason for using an HC11-style module:
-
-- the external bus is Motorola-like,
-- `R/W` and `E`-like signals are visible in the hardware,
-- `HD63BP21P` and `HD63B40P` are Motorola-bus-style parts,
-- Ghidra disassembly produces plausible HC11-like instructions such as `LDAA`, `BNE`, `BRCLR`, and `BRSET`.
-
-Important caveat:
-
-`IC1 = SC402617FN` is not proven to be a standard MC68HC11. Treat HC11 analysis as the current working model, not final silicon identification.
-
-## Import settings
+Recommended working import model:
 
 | Setting | Value / note |
 |---|---|
-| File type | Raw binary |
-| CPU language | Motorola 68HC11 / MC68HC11 from third-party module |
-| ROM size | 32 KiB |
-| Base address | Not final; derive from reset vector and chip-select decoding |
-| Analysis style | Conservative auto-analysis plus manual labels |
+| Architecture | Motorola 68HC11 / HC11-compatible language module. |
+| Endianness | Big-endian for CPU instruction / address interpretation, per HC11 family behavior. |
+| ROM base | `0x8000` for the external `27C256` image. |
+| Vector area | `0xFFC0-0xFFFF`. |
+| Main program ROM | `0x8000-0xFFBF`. |
+| Boot ROM reference | `0xBE40-0xBFFF` appears in MCU reference material, but needs care in this external ROM image. |
 
-## Base-address warning
+## Memory Blocks
 
-Do **not** blindly assume the ROM starts at `0x4000`.
+Create or verify memory blocks matching the working map:
 
-That address was discussed earlier but questioned. The correct mapping must be derived from:
+| Address range | Block name | Type |
+|---:|---|---|
+| `0x0000-0x007F` | `MCU_REGS` | Internal registers. |
+| `0x0080-0x047F` | `INTERNAL_RAM` | Internal RAM. |
+| `0x0D80-0x0FFF` | `INTERNAL_EEPROM` | Internal EEPROM. |
+| `0x1000-0x10FF` | `HC11_REG_MODEL` | Register model / compatibility area used during analysis. |
+| `0x2000-0x23FF` | `IC7_TIMER` | HD63B40P timer. |
+| `0x2400-0x27FF` | `IC4_PIA` | HD63BP21P PIA. |
+| `0x2800-0x2BFF` | `IC3_INPUT_PORT` | 74HC541 input port. |
+| `0x2C00-0x2FFF` | `EXT_RAM_WINDOW` | External SRAM window. |
+| `0x3000-0x3FFF` | `UNUSED_DECODER_RANGE` | Currently unassigned. |
+| `0x8000-0xFFBF` | `ROM` | Program ROM. |
+| `0xFFC0-0xFFFF` | `VECTORS` | Interrupt / reset vectors. |
 
-1. reset-vector location,
-2. 27C256 address-line wiring,
-3. `IC17` chip-select decode,
-4. valid Ghidra code flow,
-5. memory references matching RAM and I/O regions.
+## Labeling Strategy
 
-## Function creation workflow
+Use labels for known hardware registers and variables, but avoid over-renaming functions too early.
 
-During early analysis:
+Practical workflow:
 
-- Label obvious targets first.
-- Create functions with `F` only where the entry point is credible.
-- Good function candidates are `JSR` / `BSR` targets and reset/init flow targets.
-- For ambiguous branch targets, label first and turn into a function later.
+1. Let Ghidra identify code from reset vector and interrupt vectors.
+2. Label hardware address references first.
+3. Label known variable addresses when behavior is clear.
+4. Use function names only when the function's role is understood.
+5. Keep `SUB_xxxx` names where meaning is unknown.
+6. Pressing `F` to create functions is useful where control flow clearly enters code, but do not blindly force functions into data tables.
 
-Practical rule:
+## Known Labels / Addresses From Current Firmware Work
 
-```text
-Create functions for clear call targets.
-Label uncertain branch targets as LAB_xxxx or TODO_xxxx first.
-```
-
-This avoids turning data tables into fake functions, which Ghidra will happily do because apparently tools also enjoy practical jokes.
-
-## Current labels / observed variables
-
-| Address / label | Current meaning |
+| Symbol / address | Meaning / note |
 |---|---|
-| `MEAS_ENABLE_FLAGS_67` | Measurement-enable or mode flag byte; bit `0x10` observed in branch logic |
-| `DAT_0049` | Bit 0 tested by `BRCLR` in current snippet |
-| `DAT_0192` | RAM variable loaded in branch path |
-| `DAT_019B` | RAM variable loaded and tested with `BNE` |
-| `DAT_8249` | ROM constant/value observed as `0x1F` in snippet |
-| `0x2401 bit 7` | Interesting PIA/peripheral-related bit under investigation |
+| `MEAS_ENABLE_FLAGS_67` | Firmware flag byte at `0x0067`, seen in `BRSET` context. |
+| `DAT_0049` | Variable / flag byte referenced near `0xBF6F`. |
+| `DAT_0192` | Variable loaded near `0xBF78`. |
+| `DAT_019B` | Variable loaded near `0xBF73`. |
+| `DAT_8249` | ROM data byte observed as `0x1F`, loaded near `0xBF7F`. |
+| `0x2401 bit 7` | Now interpreted as likely PIA Port B bit 7 / external `A20`, not CRA/CA1. |
 
-## Example observed snippet
+Example observed disassembly context:
 
 ```asm
-bf6f 13 49 01 05    BRCLR  DAT_0049,0x1,LAB_bf78
-bf73 b6 01 9b       LDAA   DAT_019b
-bf76 26 12          BNE    LAB_bf8a
-
-LAB_bf78:
-bf78 b6 01 92       LDAA   DAT_0192
-bf7b 12 67 10 03    BRSET  MEAS_ENABLE_FLAGS_67,0x10,LAB_bf82
-bf7f b6 82 49       LDAA   DAT_8249 ; = 0x1F
+BF6F: BRCLR  DAT_0049, #0x01, LAB_BF78
+BF73: LDAA   DAT_019B
+BF76: BNE    LAB_BF8A
+BF78: LDAA   DAT_0192
+BF7B: BRSET  MEAS_ENABLE_FLAGS_67, #0x10, LAB_BF82
+BF7F: LDAA   DAT_8249   ; observed ROM byte: 0x1F
 ```
 
-Interpretation:
+## Hardware Address Labels
 
-- `DAT_0049 bit 0` gates one branch path.
-- `DAT_019B` is tested for non-zero.
-- `MEAS_ENABLE_FLAGS_67 bit 4` selects a branch around a ROM constant load.
-- `DAT_8249 = 0x1F` is likely a ROM constant or calibration value, depending on final memory map.
+Suggested Ghidra labels:
 
-## Memory block setup recommendations
+| Address | Suggested label |
+|---:|---|
+| `0x2000` | `IC7_TIMER_BASE` |
+| `0x2400` | `IC4_PIA_BASE` |
+| `0x2400` | `IC4_PORTA_OR_DDRA` |
+| `0x2401` | `IC4_PORTB_OR_DDRB` |
+| `0x2402` | `IC4_CRA` |
+| `0x2403` | `IC4_CRB` |
+| `0x2800` | `IC3_INPUT_PORT` |
+| `0x2C00` | `EXT_RAM_BASE` |
 
-Once ranges are proven, configure memory blocks like this:
+Because of the mirrored `IC4` register select wiring, use the labels above rather than generic PIA datasheet order.
 
-| Region type | Ghidra attributes |
-|---|---|
-| ROM | read + execute, not write, not volatile |
-| RAM | read + write; usually not marked hardware-volatile, but runtime-changing |
-| PIA / PTM registers | read + write + volatile |
-| Input-buffer address range | read + volatile |
-| Output register / latch range | write + volatile, read only if readback exists |
+## Decompiler Caveats
 
-## Next Ghidra tasks
+The decompiler may produce misleading output when:
 
-1. Confirm ROM load address using reset vectors.
-2. Label all known memory-mapped peripheral candidates.
-3. Mark hardware register ranges as volatile.
-4. Track all accesses to `0x2401`, especially bit 7.
-5. Track writes that likely drive `IC5` / `IC800` SE123 outputs.
-6. Build a cross-reference table from firmware register/bit to board net.
+- RAM/register overlays are not modeled correctly,
+- hardware registers are treated as normal RAM,
+- vector tables or jump tables are misidentified,
+- memory-mapped I/O reads have side effects,
+- port/DDRx switching in PIA control registers changes register meaning.
+
+For I/O-heavy firmware, the disassembly is often more trustworthy than decompiled C.

@@ -1,83 +1,78 @@
-# External Bus and Memory
+# External Bus and Memory Map
 
-## External data bus
+## Data Bus
 
-The external data bus is 8-bit wide and shared by ROM, RAM, buffer, and memory-mapped peripherals.
+`IC1` exposes an 8-bit data bus on pins `49-56`:
 
-| Signal | IC1 pin | Notes |
-|---|---:|---|
-| `D0` / `IO0` | 49 | ROM + RAM data bus |
-| `D1` / `IO1` | 50 | ROM + RAM data bus |
-| `D2` / `IO2` | 51 | ROM + RAM data bus |
-| `D3` / `IO3` | 52 | ROM + RAM data bus |
-| `D4` / `IO4` | 53 | ROM + RAM data bus |
-| `D5` / `IO5` | 54 | ROM + RAM data bus |
-| `D6` / `IO6` | 55 | ROM + RAM data bus |
-| `D7` / `IO7` | 56 | ROM + RAM data bus |
+| Bit | IC1 pin |
+|---:|---:|
+| `D0` | 49 |
+| `D1` | 50 |
+| `D2` | 51 |
+| `D3` | 52 |
+| `D4` | 53 |
+| `D5` | 54 |
+| `D6` | 55 |
+| `D7` | 56 |
 
-## External address bus
+The bus is shared by at least:
 
-| Signal | IC1 pin | Used by |
-|---|---:|---|
-| `A0` | 78 | ROM/RAM/peripherals |
-| `A1` | 77 | ROM/RAM/peripherals |
-| `A2` | 76 | ROM/RAM/peripherals |
-| `A3` | 75 | ROM/RAM |
-| `A4` | 74 | ROM/RAM |
-| `A5` | 73 | ROM/RAM |
-| `A6` | 72 | ROM/RAM |
-| `A7` | 71 | ROM/RAM |
-| `A8` | 21 | ROM/RAM |
-| `A9` | 20 | ROM/RAM |
-| `A10` | 19 | ROM/RAM/decoder |
-| `A11` | 18 | ROM/RAM/decoder |
-| `A12` | 17 | ROM/RAM/decoder |
-| `A13` | 16 | ROM and decoder |
-| `A14` | 15 | ROM and decoder |
+- `IC10` SRAM (`TC5564APL`)
+- `IC11` EPROM (`27C256`)
+- `IC3` 74HC541 input buffer output side
+- `IC4` PIA
+- `IC7` timer
 
-## ROM: IC11 27C256
+## External Address Bus
 
-Known pins:
+Known address pins are `A0-A14`, see [IC1 pin mapping](ic1_pin_mapping.md).
 
-| IC11 pin | Signal |
+`A0-A12` are shared by RAM and ROM. `A13` and `A14` are only needed by the larger ROM space / decode logic.
+
+## Working Memory Map
+
+| Address range | Device / function | Notes | Confidence |
+|---:|---|---|---|
+| `0x0000-0x007F` | Internal MCU registers | Datasheet-derived reference. | Reference / model. |
+| `0x0080-0x047F` | Internal MCU RAM | Datasheet-derived reference. | Reference / model. |
+| `0x0D80-0x0FFF` | Internal EEPROM | Datasheet-derived reference. | Reference / model. |
+| `0x1000-0x10FF` | HC11 register area / model | Used during analysis; may reflect mirrored or compatibility register space depending on MCU. | Working model. |
+| `0x2000-0x23FF` | `IC7` HD63B40P timer | Selected by `IC17` output `/Y0`. | Strong. |
+| `0x2400-0x27FF` | `IC4` HD63BP21P PIA | Selected by `IC17` output `/Y1`. | Strong. |
+| `0x2800-0x2BFF` | `IC3` 74HC541 input port | Selected by `IC17` output `/Y2`. | Strong. |
+| `0x2C00-0x2FFF` | `IC10` external RAM | Selected by `IC17` output `/Y3` or equivalent decode. | Strong. |
+| `0x3000-0x3FFF` | Unused decoder range | No assigned device yet. | Working hypothesis. |
+| `0x8000-0xFFBF` | External ROM program area | `27C256` content. | Strong. |
+| `0xFFC0-0xFFFF` | Vectors | CPU vector area in ROM. | Strong. |
+| `0xBE40-0xBFFF` | Boot ROM / vector related area | Mentioned in MCU reference; relevance to this ECU still needs careful treatment. | Reference / unresolved. |
+
+## PIA Register Address Correction
+
+The current confirmed `IC4` register-select wiring is unusual:
+
+| IC4 pin | Signal |
 |---:|---|
-| 3..10 | `A7..A0` |
-| 11..13 | `O0..O2` |
-| 15..19 | `O3..O7` |
-| 20 | `/CE` or `/PGM` context; connected to `IC20:11` |
-| 21 | `A10` |
-| 22 | `/OE`, shared global read `/OE` |
-| 23 | `A11` |
-| 24 | `A9` |
-| 25 | `A8` |
-| 26 | `A13` |
-| 27 | `A14` |
+| 35 (`RS1`) | `A0` |
+| 36 (`RS0`) | `A1` |
 
-## RAM: IC10 TC5564APL
+Therefore the visible register order in address space is mirrored compared with the simple `A1:A0 -> RS1:RS0` expectation.
 
-Known pins:
+| Address | Effective `RS1:RS0` | Current interpretation |
+|---:|---:|---|
+| `0x2400` | `00` | Port A / DDRA depending on control register. |
+| `0x2401` | `10` | Port B / DDRB depending on control register. |
+| `0x2402` | `01` | CRA. |
+| `0x2403` | `11` | CRB. |
 
-| IC10 pin | Signal / connection |
-|---:|---|
-| 2 | `A12`, also `IC17:3` and `IC1:17` |
-| 20 | `IC17:10`, likely RAM chip-select path |
-| 22 | shared global `/OE`, also `IC20:3` and `IC3:19` |
-| 26 | `CE2`, connected to `IC20:2`, `IC7:17`, `IC4:25`, via `F4` to `IC1:48` |
-| 27 | `R/W`, connected to `IC20:1`, `IC4:21`, `IC7:13`, via `F3` to `IC1:47` |
+This matters because `0x2401 bit 7` is no longer interpreted as `CRA bit 7 / CA1 flag`. It is most likely Port B bit 7, connected to `IC4 pin17`, with pull-up `R30` and external connector `A20`.
 
-## Memory-map caution
+## ROM and RAM Notes
 
-A previous assumption that ROM starts at `0x4000` was challenged. Do **not** treat `0x4000` as proven.
+- `IC11 = 27C256`: 32 KiB EPROM.
+- `IC10 = TC5564APL`: 8 KiB SRAM, but currently mapped through a smaller external window (`0x2C00-0x2FFF`) in the working map.
+- RAM and ROM share the lower address pins and data bus.
+- `/OE` for RAM, ROM, and `IC3` is tied into the read-enable logic generated by `IC20`.
 
-Current safer statement:
+## Bus Measurement Implication
 
-> ROM placement must be derived from reset-vector location, 27C256 wiring, `IC17` decode, and valid code flow in Ghidra.
-
-## Provisional Ghidra memory types
-
-| Region type | Read | Write | Volatile | Notes |
-|---|---:|---:|---:|---|
-| ROM / `IC11` | yes | no | no | base address still TODO |
-| RAM / `IC10` | yes | yes | yes-ish | variables, stack, buffers |
-| PIA/PTM/peripheral registers | yes | yes | yes | memory-mapped I/O |
-| `IC3` input buffer | yes | no | yes | address-selected external input read |
+A logic analyzer can likely observe external bus activity around the RAM and ROM. External RAM watching should be feasible with `DSLogic Plus`, `sigrok-cli`, and Python, provided address, data, `R/W`, `E`, and chip-select timing are captured with enough sample rate and trigger discipline. So yes, the silicon will scream its secrets; it just does so in 8-bit bureaucratese.

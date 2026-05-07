@@ -1,95 +1,88 @@
 # Firmware Analysis Notes
 
-## Current analysis model
+## Current Target Model
 
-The firmware is analyzed as HC11-like Motorola 8-bit code in Ghidra using a third-party HC11 / 68HC11 language module.
+The firmware is analyzed as an HC11-like ROM image, with external ROM mapped at `0x8000` and vectors at the top of the address space.
 
-This is a useful working model, not yet final proof of the exact `IC1` CPU core.
+`IC1` is marked `SC402617FN`, so the exact CPU is not fully identified. The HC11 analysis model is useful but should not be treated as divine scripture carved into silicon by Motorola.
 
-## ROM
+## Current Memory Map For Firmware Interpretation
 
-| Item | Value |
-|---|---|
-| Physical ROM | `IC11 = 27C256` |
-| Size | 32 KiB |
-| Data width | 8 bit |
-| Address pins | `A0..A14` |
+| Range | Interpretation |
+|---:|---|
+| `0x0000-0x007F` | Internal MCU registers. |
+| `0x0080-0x047F` | Internal RAM. |
+| `0x0D80-0x0FFF` | Internal EEPROM. |
+| `0x1000-0x10FF` | HC11 register model / analysis helper. |
+| `0x2000-0x23FF` | `IC7` timer. |
+| `0x2400-0x27FF` | `IC4` PIA. |
+| `0x2800-0x2BFF` | `IC3` input port. |
+| `0x2C00-0x2FFF` | External RAM window. |
+| `0x3000-0x3FFF` | Unused / unassigned decoder range. |
+| `0x8000-0xFFBF` | ROM program. |
+| `0xFFC0-0xFFFF` | Vectors. |
 
-## Known code/variable observations
+## Known Firmware Symbols
+
+| Symbol | Address / context | Notes |
+|---|---|---|
+| `MEAS_ENABLE_FLAGS_67` | `0x0067` | Flag byte. Used with `BRSET #0x10`. |
+| `DAT_0049` | `0x0049` | Flag / state byte. Used with `BRCLR #0x01`. |
+| `DAT_0192` | `0x0192` | RAM variable loaded in branch path. |
+| `DAT_019B` | `0x019B` | RAM variable loaded before `BNE`. |
+| `DAT_8249` | `0x8249` | ROM byte, observed value `0x1F`. |
+
+## Example Code Fragment
 
 ```asm
-BRCLR  DAT_0049,0x1,LAB_bf78
-LDAA   DAT_019b
-BNE    LAB_bf8a
-
-LAB_bf78:
-LDAA   DAT_0192
-BRSET  MEAS_ENABLE_FLAGS_67,0x10,LAB_bf82
-LDAA   DAT_8249 ; = 0x1F
+BF6F: BRCLR  DAT_0049, #0x01, LAB_BF78
+BF73: LDAA   DAT_019B
+BF76: BNE    LAB_BF8A
+BF78: LDAA   DAT_0192
+BF7B: BRSET  MEAS_ENABLE_FLAGS_67, #0x10, LAB_BF82
+BF7F: LDAA   DAT_8249
 ```
 
-| Symbol / address | Meaning / hypothesis | Confidence |
-|---|---|---:|
-| `DAT_0049 bit 0` | Conditional flag controlling branch path | Medium |
-| `DAT_019B` | RAM variable checked for non-zero | Medium |
-| `DAT_0192` | RAM variable used in fallback/default path | Medium |
-| `MEAS_ENABLE_FLAGS_67 bit 0x10` | Measurement/mode-enable flag | Medium |
-| `DAT_8249 = 0x1F` | ROM constant or calibration byte | Medium |
-| `0x2401 bit 7` | Interesting PIA/peripheral bit under investigation | Medium |
+Interpretation pending. This fragment appears to select between RAM state variables and a ROM fallback / calibration value depending on flags.
 
-## Function creation policy
+## Hardware Register Interpretation Notes
 
-1. Use labels freely.
-2. Create functions only at credible entry points.
-3. Prefer semantic labels once behavior is known.
-4. Avoid over-typing data tables as code.
+### `0x2401 Bit 7`
 
-Recommended naming style:
+Current conclusion:
 
-```text
-SUB_xxxx                  ; unknown but callable subroutine
-INIT_xxx                  ; initialization routine
-READ_xxx                  ; read routine
-UPDATE_xxx                ; periodic update routine
-PIA_xxxx_BITn_TODO        ; hardware bit under investigation
-DAT_xxxx                  ; unknown RAM/ROM data
-CAL_xxxx                  ; likely calibration data
-```
+- `0x2401` is likely `IC4` Port B / DDRB space due to mirrored RS wiring.
+- Bit 7 likely corresponds to `IC4 pin17`.
+- `IC4 pin17` has `R30` pull-up and external connector `A20`.
+- It is not currently interpreted as `CRA bit 7 / CA1`.
+- `IC4 pin40 CA1` is tied to GND.
 
-## Hardware correlation workflow
+### `IC7` Timer
 
-For every interesting firmware access:
+The timer is selected at `0x2000-0x23FF`, with outputs:
 
-1. Record address and bit mask.
-2. Determine whether the address is ROM, RAM, or I/O.
-3. Check cross-references in Ghidra.
-4. Map to decoded chip-select if possible.
-5. Probe corresponding physical pin or connector net.
-6. Rename symbol only after behavior is plausible.
-
-## High-value targets
-
-| Target | Why it matters |
+| Timer output | Physical route |
 |---|---|
-| Reset vector and startup routine | Determines ROM base and CPU execution model |
-| `0x2401 bit 7` | Likely PIA-related hardware behavior |
-| Writes to SE123 control pins | Output-driver mapping to actuators |
-| Reads through `IC3` | External switch / diagnostic input mapping |
-| `IC6:22` comparator path | May be power, ignition, diagnostic, or threshold input |
-| RAM variables around `0x0049`, `0x0067`, `0x0192`, `0x019B` | Control flags and runtime state |
+| `O1` | `IC7:27 -> C14 -> IC701:4`. |
+| `O2` | `IC7:3 -> C15 -> IC701:5`. |
+| `O3` | `IC7:6 -> C16 -> IC701:6`. |
 
-## Logic analyzer idea
+Because `/IRQ` is not connected, firmware likely configures and polls the timer, while outputs perform hardware timing.
 
-A DSLogic Plus with `sigrok-cli` can be used to watch the external bus or selected chip-select/control lines.
+## Analysis Workflow Notes
 
-Useful signals:
+- Label known hardware addresses before naming high-level functions.
+- Keep uncertain functions as `SUB_xxxx`.
+- Do not assume the PIA register order from the datasheet without applying the actual RS wiring.
+- Treat reads from `IC3_INPUT_PORT` as polarity-dependent because `IC6`/`IC500` channels differ in behavior.
+- Watch for timer setup code writing to `0x2000-0x23FF`; it may reveal injection timing configuration.
+- Watch for port writes to `0x2400-0x2403`; they may configure SE123 output directions / enables.
 
-- `E` / bus-enable line,
-- `R/W`,
-- global `/OE`,
-- `IC17` outputs,
-- selected address lines,
-- selected data-bus bits,
-- SE123 control pins.
+## Suggested Next Firmware Tasks
 
-Start small: `E`, `R/W`, one chip-select, and a few address/data lines. Capturing the whole universe at once is how humans invent new kinds of disappointment.
+1. Locate reset vector and startup initialization.
+2. Identify all writes to `IC4` PIA control registers.
+3. Identify all writes to `IC7` timer control registers.
+4. Cross-reference all reads from `IC3_INPUT_PORT`.
+5. Label RAM variables that gate injector / measurement / enable behavior.
+6. Build a table of memory-mapped I/O accesses by address and function.

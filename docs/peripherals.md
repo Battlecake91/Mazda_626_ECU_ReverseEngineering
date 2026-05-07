@@ -1,65 +1,55 @@
-# Peripherals
+# Peripheral Summary
 
-## IC4: HD63BP21P
+## Confirmed External Peripherals
 
-`IC4 = HD63BP21P`, likely a Motorola-compatible PIA-style parallel I/O peripheral.
+| Device | Address range | Select source | Notes |
+|---|---:|---|---|
+| `IC7` HD63B40P timer | `0x2000-0x23FF` | `IC17:15 (/Y0)` | Three output channels routed to connector `C14-C16` and `SE074` circuitry. |
+| `IC4` HD63BP21P PIA | `0x2400-0x27FF` | `IC17:14 (/Y1)` | Register select wiring mirrored: `RS1=A0`, `RS0=A1`. |
+| `IC3` 74HC541 input port | `0x2800-0x2BFF` | `IC17:13 (/Y2)` plus global `/OE` | Reads level-shifter outputs from `IC500` and `IC6`. |
+| `IC10` TC5564 SRAM | `0x2C00-0x2FFF` working window | Decoder / bus logic | External SRAM. |
+| `IC11` 27C256 ROM | `0x8000-0xFFFF` | ROM select / address decode | External program ROM and vectors. |
 
-### Known pin connections
+## Analog / Mixed Signal
 
-| IC4 pin | Connection / notes |
-|---:|---|
-| 1 | `VSS` |
-| 2 | through `1 kΩ` to `D2` |
-| 3 | through `1 kΩ` to `IC21:7` |
-| 4 | through `1 kΩ` to `IC6:6` |
-| 5 | through `1 kΩ` to `IC6:5` |
-| 6 | through `1 kΩ` to `IC6:3` |
-| 7 | `R39` pull-up to `VCC`, `R42` pull-down not populated |
-| 8 | `R38` pull-up to `VCC`, `R41` pull-down not populated |
-| 9 | `R37` pull-up not populated, `R40` pull-down |
-| 10 | `R36` pull-up to `VCC` |
-| 11 | `R35` pull-up to `VCC` |
-| 12 | `R34` pull-up to `VCC` |
-| 13 | `R33` pull-up to `VCC` |
-| 14 | `R32` pull-up to `VCC` |
-| 15 | `R31` pull-up to `VCC` |
-| 16 | external connector `B8` |
-| 18 | connected to pin 19 through `R28` |
-| 19 | connected to pin 18 through `R28` |
-| 20 | `VCC` |
-| 21 | `IC10:27`, `IC7:13`, `IC20:1`; likely `R/W` |
-| 22 | `R26` pull-up to `VCC` |
-| 23 | `IC17:14`, likely chip-select |
-| 24 | `R27` pull-up to `VCC` |
-| 25 | `IC7:17`, `IC9:11`, `IC10:26`, `IC20:2`, via `F4` to `IC1:48`; likely `E` |
-| 26 | `IC7:18`, `IC11:19`, `IC10:19`, `IC3:18` |
+| Device | Type | Current notes |
+|---|---|---|
+| `IC13` TC4051BP | 8-channel analog mux | Full channel routing pending. |
+| `IC21` TLC272 | Dual op amp | Analog conditioning. |
+| `IC6` / `IC500` D151821-0020 | Comparator / level shifter | Converts / conditions external 12 V, ground-detect, and comparator signals to 5 V logic. |
 
-### Firmware note
+## Output / Driver ICs
 
-`0x2401, bit 7` has been identified as interesting and likely PIA/peripheral-related.
+| Device | Current role |
+|---|---|
+| `IC5` SE123 | Denso custom multi-channel output driver / interface IC. |
+| `IC800` SE123 | Second Denso custom multi-channel output driver / interface IC. |
+| `IC700` SE074 | Likely 3-channel injector pre-driver / driver logic. |
+| `IC701` SE074 | Likely 3-channel injector pre-driver / driver logic. |
 
-Suggested temporary Ghidra label:
+## Timer / Injector Path Summary
+
+The current strong hypothesis is:
 
 ```text
-PIA_2401_BIT7_TODO
+IC1 firmware configures IC7 timer
+IC7 O1/O2/O3 generate timed pulse signals
+IC701 SE074 receives those three timer outputs
+IC701 drives three injector transistor stages
+IC700 receives related control lines directly from IC1
+IC700 drives the other three injector transistor stages
 ```
 
-## IC7: HD63B40P
+This creates a plausible 6-cylinder injector arrangement using two 3-channel SE074 devices.
 
-`IC7 = HD63B40P`, likely a Motorola-style timer / peripheral device.
+The unresolved architectural question is why `IC700` is driven by direct `IC1` lines while `IC701` receives the dedicated `IC7` timer outputs. Possible explanations include:
 
-Known pins:
+- V6 bank split,
+- staged / paired injection logic,
+- duplicated pulse generation in MCU firmware,
+- SE074-internal bank / channel / phase logic,
+- missing intermediate routing not yet traced.
 
-| IC7 pin | Connection / interpretation |
-|---:|---|
-| 13 | `IC10:27`, `IC4:21`, `IC20:1`; likely `R/W` |
-| 17 | `IC10:26`, `IC4:25`, `IC9:11`, `IC20:2`, via `F4` to `IC1:48`; likely `E` / system clock |
-| 18 | `IC4:26`, `IC11:19`, `IC10:19`, `IC3:18` |
+## Reset
 
-## IC13: TC4051BP
-
-Likely analog sensor multiplexing or diagnostic routing. Exact channel mapping is not yet documented.
-
-## IC21: TLC272
-
-Dual op amp. `IC21:7` connects through `1 kΩ` to `IC4:3`, implying a firmware-visible analog/comparator-conditioned signal.
+`IC4 /RESET` and `IC7 /RESET` are tied together and also routed externally via `D7`. On the daughterboard, `D7` reaches `IC001:4` (`SE134`).

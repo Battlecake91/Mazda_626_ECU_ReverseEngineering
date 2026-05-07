@@ -1,100 +1,95 @@
-# Chip-Select and Glue Logic
+# Chip Select and Glue Logic
 
-## IC17: 74HC138 address decoder
+## Main Devices
 
-`IC17 = 74HC138AP`
+| Refdes | Device | Function |
+|---|---|---|
+| `IC17` | `74HC138AP` | Address decoder. |
+| `IC20` | `74HC00AP` | Quad NAND gate used for read-enable generation and signal conditioning. |
+| `F1-F4` | Unknown links / filter / fusible / series parts | Used in bus-control and timer-clock paths. Exact part type unknown. |
 
-Known connections:
+## IC17 74HC138 Address Decoder
 
-| IC17 pin | Function | Connection |
+`IC17` decodes external address ranges for peripherals and RAM. Known relevant outputs:
+
+| IC17 pin | 74HC138 output | Destination / role |
 |---:|---|---|
-| 1 | `A0` | address `A10` |
-| 2 | `A1` | address `A11` |
-| 3 | `A2` | address `A12`, also `IC10:2`, `IC1:17` |
-| 4 | `/G2A` | connected to `IC20:12/13` in corrected notes |
-| 5 | `/G2B` | address `A14` |
-| 6 | `G1` | address `A13` |
-| 10 | `/Y5` | connected to `IC10:20`, likely RAM select |
-| 13 | `/Y2` | connected to `IC3:1`, input-buffer select |
-| 14 | `/Y1` | connected to `IC4:23`, PIA select |
+| 15 | `/Y0` | `IC7` timer select, range `0x2000-0x23FF`. |
+| 14 | `/Y1` | `IC4` PIA select, range `0x2400-0x27FF`. |
+| 13 | `/Y2` | `IC3` 74HC541 `/OE1`, range `0x2800-0x2BFF`. |
 
-## IC20: 74HC00 glue logic
+`IC3 pin1 (/OE1)` is connected to `IC17 pin13`, so the input buffer is address-selected by the decoder.
 
-`IC20 = 74HC00AP`
+## IC20 74HC00 Gate Mapping
 
-### Corrected pin map
+### Gate 1: Read Output Enable Generation
 
-| IC20 pin | Connection / meaning |
-|---:|---|
-| 1 | `R/W`-like signal: `IC10:27`, `IC4:21`, `IC7:13`, via `F3` to `IC1:47` |
-| 2 | `E` / bus-enable-like signal: `IC10:26`, `IC4:25`, `IC7:17`, `IC9:11`, via `F4` to `IC1:48` |
-| 3 | global active-low read `/OE`; via `F2` to `IC10:22`, `IC11:22`, `IC3:19` |
-| 4 | tied to pin 5; input-conditioning logic through `R101` to `IC6:22` |
-| 5 | tied to pin 4 |
-| 6 | output of gate 2; connected to `IC1:19` in current notes, needs recheck |
-| 8 | through `R606` to `IC1:21` |
-| 9 | tied to pin 10 and `C10` |
-| 10 | tied to pin 9 and `C10` |
-| 11 | output of NAND gate 4; connected to `IC11:20` |
-| 12 | tied to pin 13 and connected to `IC17:4` |
-| 13 | tied to pin 12 and connected to `IC17:4` |
-| 14 | `VCC`; also related to `R56` in the current trace notes |
-
-### Gate 1: global read `/OE`
-
-Inputs:
-
-- `IC20:1` = `R/W`-like signal,
-- `IC20:2` = `E` / bus-enable-like signal.
-
-Output:
-
-- `IC20:3` = shared active-low read `/OE`.
-
-Connected devices:
-
-- `IC10:22` SRAM `/OE`,
-- `IC11:22` ROM `/OE`,
-- `IC3:19` 74HC541 `/OE2`.
-
-This strongly suggests that ROM, RAM, and the input buffer only drive the data bus during valid read cycles.
-
-### Gate 2: IC6 comparator path
-
-Pins `IC20:4` and `IC20:5` are tied together and connected through `R101` to `IC6:22`, with `R99` pull-up and `R100` pull-down nearby.
-
-The gate acts as an inverter / thresholded digital stage for the comparator-related `IC6:22` signal.
-
-### Important correction: IC20 gate 4
-
-A previous assumption treated `IC20:12` as an output. That is wrong for a 74HC00 package.
-
-Correct:
-
-- `IC20:12` and `IC20:13` are inputs.
-- `IC20:11` is the output.
-
-Current trace:
-
-- `IC20:12/13` go to `IC17:4`.
-- `IC20:11` goes to `IC11:20`.
-
-This correction is critical for ROM chip-enable reconstruction. Tiny NAND gates: small enough to hide, annoying enough to ruin a memory map.
-
-## IC3: 74HC541 input-buffer enable
-
-| IC3 pin | Function | Connection |
+| IC20 pin | Function | Connected net |
 |---:|---|---|
-| 1 | `/OE1` | `IC17:13` |
-| 19 | `/OE2` | global read `/OE` from `IC20:3` |
-| 11..18 | outputs | data bus `D0..D7` |
+| 1 | Gate 1 input A | `R/W` net: `IC10:27`, `IC4:21`, `IC7:13`, through `F3` to `IC1:47`. |
+| 2 | Gate 1 input B | Bus enable / `E` / CE timing net: `IC10:26`, `IC4:25`, `IC7:17`, `IC9:11`, through `F4` to `IC1:48`. |
+| 3 | Gate 1 output | Global active-low `/OE` via `F2` to `IC10:22`, `IC11:22`, `IC3:19`. |
 
-Interpretation:
+Current interpretation:
 
-`IC3` is selected by address decode and additionally gated by read-cycle `/OE`.
+- `IC20:3` generates a shared active-low output enable for read cycles.
+- It enables ROM, RAM, and `IC3` outputs only during valid read bus timing.
+- The exact polarity depends on the MCU's `R/W` and `E` conventions, but the observed shared destination is clear.
 
-## Open checks
+### Gate 2: Input Conditioning / Inverter
 
-- Re-probe `IC20:12/13`, `IC20:11`, `IC17:4`, `R56`, and any `IC1:14` relation.
-- Confirm `IC20:3` timing against `R/W` and `E` using a logic analyzer.
-- Resolve the apparent conflict around `IC20:6 -> IC1:19` while `IC1:19` is also `A10`.
+| IC20 pin | Function | Connection |
+|---:|---|---|
+| 4 | Gate 2 input A | Tied to pin 5, connected through `R101` to `IC6:22`; with `R99` pull-up and `R100` pull-down context. |
+| 5 | Gate 2 input B | Tied to pin 4. |
+| 6 | Gate 2 output | Connected to `IC1:19` (`A10` pin also listed in address mapping context, so verify net naming carefully). |
+
+Current interpretation:
+
+- Gate 2 is wired as an inverter / Schmitt-like digital conditioning stage.
+- Input comes from the `IC6:22` comparator / level-shifter side through surrounding resistors.
+- Output reaches `IC1:19`. This needs careful schematic interpretation because `IC1:19` is also currently documented as address line `A10`; this may reflect net reuse confusion or measurement context that should be revisited.
+
+### Gate 3: Unresolved / Partial
+
+| IC20 pin | Function | Known connection |
+|---:|---|---|
+| 8 | Gate 3 output | Through `R606` to `IC1:21`. |
+| 9 | Gate 3 input | Connected to pin 10 and `C10`. |
+| 10 | Gate 3 input | Connected to pin 9 and `C10`. |
+
+Current interpretation:
+
+- Gate 3 is likely used as an inverter / RC conditioning stage.
+- Exact role unresolved.
+
+### Gate 4: Decoder Enable / Control
+
+| IC20 pin | Function | Connection |
+|---:|---|---|
+| 11 | Gate 4 output | Connected to `IC11:20`. Earlier assumptions about this net should be rechecked. |
+| 12 | Gate 4 input A | Tied to pin 13 and connected to `IC17:4` (`/G2A` or enable input context). |
+| 13 | Gate 4 input B | Tied to pin 12. |
+
+Important correction:
+
+- `IC20:12/13` are the inputs.
+- `IC20:11` is the NAND gate output.
+- Earlier assumptions that pin 12 was an output to `IC17:4` are incorrect.
+
+## Shared `/OE` Net
+
+Known destinations of the shared active-low output enable net:
+
+| Device | Pin | Role |
+|---|---:|---|
+| `IC10` SRAM | 22 | `/OE` |
+| `IC11` ROM | 22 | `/OE` |
+| `IC3` 74HC541 | 19 | `/OE2` |
+
+This means `IC3` is enabled only when both conditions are true:
+
+1. Address select via `IC17` on `IC3 pin1 (/OE1)`.
+2. Read-cycle global `/OE` via `IC20:3` on `IC3 pin19 (/OE2)`.
+
+That is pleasantly sane, which is suspicious, but useful.

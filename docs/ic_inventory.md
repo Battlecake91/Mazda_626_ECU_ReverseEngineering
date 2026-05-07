@@ -1,63 +1,44 @@
 # IC Inventory
 
-## Main IC list
+## Main ECU Board
 
-| RefDes | Part marking | Known / likely function | Confidence |
-|---|---|---|---:|
-| `IC1` | `SC402617FN` | Main MCU or Denso custom controller | Medium |
-| `IC3` | `74HC541` | Octal tri-state input buffer onto data bus | High |
-| `IC4` | `HD63BP21P` | PIA-style parallel I/O peripheral | High |
-| `IC5` | `SE123` | Denso custom multi-channel output driver | Medium |
-| `IC6` | `151821-0020` / `D151821-0020` | Denso comparator / level-shifter IC | Medium-High |
-| `IC7` | `HD63B40P` | Motorola-style timer/peripheral IC | High |
-| `IC8` | `74HC595` | Serial-in parallel-out shift register | High |
-| `IC9` | `74HC74AP` | Dual D flip-flop | High |
-| `IC10` | `TC5564APL` | 8 KiB SRAM | High |
-| `IC11` | `27C256` | 32 KiB EPROM / firmware ROM | High |
-| `IC13` | `TC4051BP` | 8-channel analog multiplexer | High |
-| `IC17` | `74HC138AP` | 3-to-8 decoder / chip-select logic | High |
-| `IC20` | `74HC00AP` | Quad NAND glue logic | High |
-| `IC21` | `TLC272` | Dual op amp | High |
-| `IC800` | `SE123` | Denso custom multi-channel output driver | Medium |
-| `X1` | `8 MHz` | Main crystal | High |
+| Refdes | Marking / part | Type | Role | Confidence |
+|---|---|---|---|---|
+| `IC1` | `SC402617FN` | MCU / custom MCU | Main controller, external bus master. | Strong hypothesis / confirmed connections. |
+| `IC3` | `74HC541` | Octal buffer | Memory-mapped input port on data bus `D0-D7`. | Confirmed. |
+| `IC4` | `HD63BP21P` | PIA | Parallel I/O adapter mapped at `0x2400-0x27FF`. | Confirmed device, pin mapping partly active. |
+| `IC5` | `SE123` | Denso custom | Multi-channel driver / interface IC. | Strong hypothesis. |
+| `IC6` | `151821-0020` / `D151821-0020` | Denso custom comparator / level shifter | 12 V / ground detect / comparator interface to 5 V logic. | Strong hypothesis with source and behavior notes. |
+| `IC7` | `HD63B40P` | Programmable timer | Timer outputs likely used for injection / pulse timing. | Confirmed device and select pins. |
+| `IC8` | `74HC595` | Shift register | Output latch / serial expansion. | Confirmed part, role pending. |
+| `IC9` | `74HC74AP` | Dual D flip-flop | Two-stage divider generating timer clock from bus enable / E. | Confirmed. |
+| `IC10` | `TC5564APL` | 8 KiB SRAM | External RAM, selected at `0x2C00-0x2FFF` window. | Confirmed. |
+| `IC11` | `27C256` | 32 KiB EPROM | External ROM, mapped at `0x8000-0xFFFF` area. | Confirmed. |
+| `IC13` | `TC4051BP` | Analog mux | Analog input selection. | Confirmed part, full routing pending. |
+| `IC17` | `74HC138AP` | 3-to-8 decoder | Chip select decoder. | Confirmed. |
+| `IC20` | `74HC00AP` | Quad NAND | Read enable and reset / input conditioning glue logic. | Confirmed. |
+| `IC21` | `TLC272` | Dual op amp | Analog conditioning. | Confirmed part, full routing pending. |
+| `IC800` | `SE123` | Denso custom | Second multi-channel driver / interface IC. | Strong hypothesis. |
 
-## Passive / surrounding parts of interest
+## Daughterboard / Interface Board
 
-### SE123 / output-stage neighborhood
+| Refdes | Marking / part | Supply pins known | Current role |
+|---|---|---|---|
+| `IC001` | `SE134` | `+5 V` pin 7, GND pin 6, `+12 V` pins 10 and 11 | Denso custom interface IC. Exact function unknown. |
+| `IC250` | `MP611` | `+5 V` pin 12, GND pins 3 and 15 | Denso custom IC. Connected to shared SE074 pins 1/2 through pin 19. |
+| `IC500` | `D151821-0020` | See level shifter notes | Comparator / level shifter, same family as `IC6`. |
+| `IC700` | `SE074` | `+5 V` pin 16, GND pins 3, 8, 14, `+12 V` pin 9 | Likely injector pre-driver / driver logic. |
+| `IC701` | `SE074` | `+5 V` pins 3, 14, 16, GND pin 8, `+12 V` pin 9 | Likely injector pre-driver / driver logic. |
 
-| Part | Value / marking | Notes |
-|---|---|---|
-| `R29`, `R15`, `R87`, `R85`, `R75`, `R20`, `R5`, `R82`, `R83`, `R84`, `R601`, `R602`, `R56`, `R613`, `R611` | `10 kΩ`, 0805 | Around SE123 / related logic |
-| `R891` | `330 Ω`, 0805 | Near output circuitry |
-| `R612` | `75 kΩ`, 0805 | Near output circuitry |
-| `RA1` | `16B25K/50K` | Resistor network |
-| `C95` | `4.7 µF`, tantalum | Supply / filtering |
-| `C17` | not populated | 0805 footprint |
-| `C20`, `C21`, `C4` | unknown | 0805 capacitors |
+## Clock
 
-### Other known resistor groups
+| Refdes | Value | Notes |
+|---|---:|---|
+| `X1` | 8 MHz | Main oscillator / crystal. |
 
-| Value | Parts |
-|---|---|
-| `10 kΩ`, 0805 | `R68`, `R59`, `R64`, `R65`, `R66`, `R67`, `R70`, `R71`, `R69`, `R60`, `R61`, `R62`, `R63`, `R4`, `R58`, `R3`, `R57`, `R6`, `R10`, `R11`, `R9`, `R8`, `R7`, `R2`, `R13`, `R18`, `R14`, `R48`, `R49`, `R50`, `R52`, `R55`, `R51`, `R53`, `R54`, `R73`, `R97`, `R98`, `R22`, `R23`, `R30`, `R19`, `R17`, `R16`, `R21`, `R155`, `R38`, `R39`, `R40`, `R36`, `R35`, `R34`, `R33`, `R605`, `R25`, `R31`, `R32`, `R28` |
-| `1 kΩ`, 0805 | `R606`, `R44`, `R45`, `R46`, `R47`, `R96` |
-| `75 kΩ`, 0805 | `R95` |
-| `5.1 kΩ`, 0805 | `R43`, `R99`, `R100` |
-| `4.7 kΩ`, 0805 | `R1` |
-| `1 MΩ`, 0805 | `R607` |
-| `43 kΩ`, 0805 | `R101` |
-| not populated | `R37`, `R42`, `R41` |
+## Important Corrections
 
-### Unknown / not-yet-measured capacitors
-
-Unknown 0805 capacitors currently noted:
-
-`C35`, `C31`, `C34`, `C3`, `C23`, `C25`, `C14`, `C999`, `C13`, `C36`, `C9`, `C6`, `C10`, `C7`, `C22`, `C133`, `C131`, `C27`, `C16`, `C18`, `C19`, `C134`, `C135`, `C15`, `C080`, `C1`, `C2`.
-
-Not populated:
-
-`C992`, `C989`, `C998`, `C995`, `C996`, `C991`, `C990`.
-
-### SOT23-like parts with `C3` marking
-
-`D133`, `D131`, `D132`, `D134`, `D135`, `D137`, `D95`.
+- `IC4` register select is not the initially assumed order. Current confirmed mapping: `IC4 pin35 RS1 = A0`, `IC4 pin36 RS0 = A1`. This mirrors the apparent PIA register addresses compared to the simple datasheet order.
+- `IC7` register select is normal: `pin10 RS0 = A0`, `pin11 RS1 = A1`, `pin12 RS2 = A2`.
+- `IC7` pins `4`, `7`, and `28` are timer clock inputs and are tied together through `F1` to `IC9 pin5`.
+- `IC20 pin11`, not pin12, is the output of NAND gate 4. Pins `12` and `13` are tied inputs feeding that gate.

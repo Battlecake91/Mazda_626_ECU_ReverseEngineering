@@ -1,44 +1,78 @@
-# KLDE ECU Reverse Engineering
+# KLDE ECU Reverse Engineering Notes
 
-Reverse-engineering notes for a Mazda KL-series / KLDE-related Denso ECU.
+This repository documents the ongoing reverse engineering work on a Mazda KLDE / KL05 related Denso ECU assembly.
 
-## Known identifiers
+The notes are intentionally written as working documentation: confirmed measurements, plausible interpretations, known conflicts, and open questions are kept separate where possible. This is not a polished schematic replacement yet. It is the pile of silicon archaeology before it grows a tie and pretends to be a specification.
 
-| Marking / identifier | Context | Confidence |
-|---|---|---:|
-| `U2103136866B` | Control Unit marking | High |
-| `KL05` | Only readable part of the ECU part/family marking; the rest is scratched | High |
-| `079721-3521` | Denso / PCB / sub-board number, likely related to switching stages, voltage dividers, or an interface board | High |
-| `X1 = 8 MHz` | Main crystal | High |
+## Known Identifiers
 
-## Documentation index
+| Item | Marking / identifier | Notes |
+|---|---:|---|
+| Control unit | `U2103136866B` | ECU / control unit identifier. |
+| ECU readable marking | `KL05` | Remaining ECU serial / part number is scratched and unreadable. |
+| Secondary / interface PCB | `079721-3521` | Associated with power stages, dividers, interface circuitry, or daughterboard functions. |
+| Main project | `KLDE_ECU_Reverse` | Working project name. |
 
-| File | Purpose |
+## Documentation Index
+
+### System Overview
+
+- [Board overview](docs/board_overview.md)
+- [IC inventory](docs/ic_inventory.md)
+- [Component / BOM notes](docs/component_bom_notes.md)
+- [Connector and external signal notes](docs/connectors_and_signals.md)
+- [Open questions](docs/open_questions.md)
+
+### Main ECU Logic
+
+- [IC1 MCU pin mapping](docs/ic1_pin_mapping.md)
+- [External bus and memory map](docs/external_bus_memory.md)
+- [Chip select and glue logic](docs/chip_select_glue_logic.md)
+- [IC3 74HC541 input port](docs/ic3_input_port.md)
+- [IC4 HD63BP21P PIA](docs/ic4_pia.md)
+- [IC7 HD63B40P programmable timer](docs/ic7_timer.md)
+- [IC9 74HC74 timer clock divider](docs/ic9_timer_clock_divider.md)
+- [Peripheral summary](docs/peripherals.md)
+
+### Denso Custom / Interface ICs
+
+- [IC6 and IC500 D151821-0020 level shifter / comparator](docs/ic6_ic500_level_shifter.md)
+- [SE123 driver devices](docs/se123_driver_devices.md)
+- [SE074 injector driver hypothesis](docs/se074_injector_driver_hypothesis.md)
+- [Daughterboard Denso ICs](docs/daughterboard_denso_ics.md)
+
+### Firmware Analysis
+
+- [Ghidra HC11 setup](docs/ghidra_hc11_setup.md)
+- [Firmware analysis notes](docs/firmware_analysis.md)
+
+## Confidence Convention
+
+| Label | Meaning |
 |---|---|
-| [`docs/board_overview.md`](docs/board_overview.md) | ECU identity and architecture overview |
-| [`docs/ic_inventory.md`](docs/ic_inventory.md) | IC list and passive parts of interest |
-| [`docs/ic1_pin_mapping.md`](docs/ic1_pin_mapping.md) | Main controller / custom MCU pin mapping |
-| [`docs/external_bus_memory.md`](docs/external_bus_memory.md) | External address/data bus, ROM/RAM wiring, memory map assumptions |
-| [`docs/chip_select_glue_logic.md`](docs/chip_select_glue_logic.md) | 74HC138 / 74HC00 chip-select and `/OE` logic |
-| [`docs/peripherals.md`](docs/peripherals.md) | HD63BP21P / HD63B40P and peripheral notes |
-| [`docs/ic6_ic500_level_shifter.md`](docs/ic6_ic500_level_shifter.md) | Denso `151821-0020` / `D151821-0020` level-shifter/comparator notes |
-| [`docs/se123_driver_devices.md`](docs/se123_driver_devices.md) | SE123 output-driver hypothesis and pin mapping |
-| [`docs/connectors_and_signals.md`](docs/connectors_and_signals.md) | Connector nets and traced external signals |
-| [`docs/ghidra_hc11_setup.md`](docs/ghidra_hc11_setup.md) | Ghidra setup, HC11 processor module, labels, and workflow |
-| [`docs/firmware_analysis.md`](docs/firmware_analysis.md) | Current firmware-analysis notes and variable labels |
-| [`docs/open_questions.md`](docs/open_questions.md) | Known unknowns and next reverse-engineering targets |
+| Confirmed | Direct continuity measurement, datasheet pinout match, or repeated observation. |
+| Strong hypothesis | Fits multiple measurements and known ECU architecture, but still lacks a final schematic proof. |
+| Working hypothesis | Plausible and useful for analysis, but should be verified before relying on it. |
+| Conflict / unresolved | Known disagreement between measurements, assumptions, or source material. |
 
-## Current working model
+## Current High-Level Architecture
 
-The ECU appears to use a Motorola-style external bus architecture:
+The ECU appears to use an external 8-bit data bus around a custom or derivative MCU (`IC1 = SC402617FN`) with external ROM, external RAM, a PIA, a programmable timer, a latched / buffered input port, and several Denso custom interface / driver ICs.
 
-- `IC1 = SC402617FN` is the main custom controller / MCU-like bus master.
-- `IC11 = 27C256` is a 32 KiB external EPROM.
-- `IC10 = TC5564APL` is external SRAM.
-- `IC17 = 74HC138` decodes chip-selects from high address lines.
-- `IC20 = 74HC00` generates a shared active-low read `/OE` from `R/W` and `E`-like bus signals.
-- `IC4 = HD63BP21P` and `IC7 = HD63B40P` are Motorola-bus-style peripherals.
-- `IC6` / `IC500 = 151821-0020` are Denso comparator / 12 V-to-5 V level-shifter ICs.
-- `IC5` / `IC800 = SE123` are probably Denso multi-channel output drivers.
+The working external address map currently is:
 
-The firmware is currently analyzed in Ghidra using an HC11-like processor/language module. This is useful and plausible, but not yet final proof that `IC1` is an off-the-shelf HC11. Naturally, the most important chip wears the least useful marking, because the universe has a sense of humor and it hates documentation.
+| Range | Function |
+|---:|---|
+| `0x0000-0x007F` | Internal MCU registers, according to datasheet-derived reference. |
+| `0x0080-0x047F` | Internal MCU RAM, according to datasheet-derived reference. |
+| `0x0D80-0x0FFF` | Internal EEPROM, according to datasheet-derived reference. |
+| `0x1000-0x10FF` | HC11-compatible internal register area / mirrored register model used during analysis. |
+| `0x2000-0x23FF` | `IC7` HD63B40P timer. |
+| `0x2400-0x27FF` | `IC4` HD63BP21P PIA. |
+| `0x2800-0x2BFF` | `IC3` 74HC541 input port. |
+| `0x2C00-0x2FFF` | External RAM (`IC10` TC5564APL). |
+| `0x3000-0x3FFF` | Decoder range currently considered unused / unassigned. |
+| `0x8000-0xFFBF` | External ROM program area. |
+| `0xFFC0-0xFFFF` | Vector area in ROM. |
+
+`0xBE40-0xBFFF` is noted from MCU reference material as boot ROM / vector related space. Its practical relevance for this ECU dump still has to be handled carefully when setting up disassembly and memory blocks.
