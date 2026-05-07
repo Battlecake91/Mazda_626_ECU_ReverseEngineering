@@ -1,44 +1,36 @@
 # IC Inventory
 
-## Main ECU Board
+> Working documentation. Not an official Mazda or Denso document. Confidence varies; measured project data has priority over generic internet pinouts.
 
-| Refdes | Marking / part | Type | Role | Confidence |
+
+## Integrated Circuits
+| RefDes | Marking / Part | Package / Type | Known / Inferred Function | Notes |
 |---|---|---|---|---|
-| `IC1` | `SC402617FN` | MCU / custom MCU | Main controller, external bus master. | Strong hypothesis / confirmed connections. |
-| `IC3` | `74HC541` | Octal buffer | Memory-mapped input port on data bus `D0-D7`. | Confirmed. |
-| `IC4` | `HD63BP21P` | PIA | Parallel I/O adapter mapped at `0x2400-0x27FF`. | Confirmed device, pin mapping partly active. |
-| `IC5` | `SE123` | Denso custom | Multi-channel driver / interface IC. | Strong hypothesis. |
-| `IC6` | `151821-0020` / `D151821-0020` | Denso custom comparator / level shifter | 12 V / ground detect / comparator interface to 5 V logic. | Strong hypothesis with source and behavior notes. |
-| `IC7` | `HD63B40P` | Programmable timer | Timer outputs likely used for injection / pulse timing. | Confirmed device and select pins. |
-| `IC8` | `74HC595` | Shift register | Output latch / serial expansion. | Confirmed part, role pending. |
-| `IC9` | `74HC74AP` | Dual D flip-flop | Two-stage divider generating timer clock from bus enable / E. | Confirmed. |
-| `IC10` | `TC5564APL` | 8 KiB SRAM | External RAM, selected at `0x2C00-0x2FFF` window. | Confirmed. |
-| `IC11` | `27C256` | 32 KiB EPROM | External ROM, mapped at `0x8000-0xFFFF` area. | Confirmed. |
-| `IC13` | `TC4051BP` | Analog mux | Analog input selection. | Confirmed part, full routing pending. |
-| `IC17` | `74HC138AP` | 3-to-8 decoder | Chip select decoder. | Confirmed. |
-| `IC20` | `74HC00AP` | Quad NAND | Read enable and reset / input conditioning glue logic. | Confirmed. |
-| `IC21` | `TLC272` | Dual op amp | Analog conditioning. | Confirmed part, full routing pending. |
-| `IC800` | `SE123` | Denso custom | Second multi-channel driver / interface IC. | Strong hypothesis. |
+| IC1 | `SC402617FN` | MCU / custom controller | Main MCU / custom CPU | External address/data bus, 8 MHz clock. |
+| IC3 | `74HC541` | Octal buffer | Memory-mapped input port | Outputs connected to D0-D7. Selected by IC17 `/Y2`. Reads status from IC500/IC6. |
+| IC4 | `HD63BP21P` | PIA | Parallel I/O Adapter | Mapped at `0x2400-0x27FF` via IC17 `/Y1`. Register select is **non-standard/spiegeled**: IC4 Pin35 RS1 = A0, Pin36 RS0 = A1. |
+| IC5 | `SE123` | DIP-24 custom Denso IC | Probable multi-channel output driver / low-side or open-collector style driver | 12 V side likely outputs. See SE123 notes. |
+| IC6 | `151821-0020` / `D151821-0020` | DIP-24 custom Denso IC | Comparator / 12 V to 5 V level shifter | Mixed comparator, ground-detect and 12 V-detect behavior. |
+| IC7 | `HD63B40P` | Timer / counter peripheral | Timer / peripheral IC | Mapped at `0x2000-0x23FF` via IC17 `/Y0`. RS0/RS1/RS2 = A0/A1/A2. Timer outputs O1/O2/O3 routed externally. |
+| IC8 | `74HC595` | Shift register | Serial-to-parallel output register | Exact downstream function not yet fully mapped. |
+| IC9 | `74HC74AP` | Dual D flip-flop | Two-stage divider for IC7 timer clock | Divides E / bus-enable clock down; output on IC9 Pin5 feeds IC7 clock inputs via F1. |
+| IC10 | `TC5564APL` | SRAM, 8K x 8 | External RAM | Visible window selected at `0x2C00-0x2FFF` via IC17 `/Y3`. |
+| IC11 | `27C256` | EPROM, 32 KiB | Program ROM | Likely mapped at `0x8000-0xFFFF`; confirm with reset vector at dump offset `0x7FFE/0x7FFF`. |
+| IC13 | `TC4051BP` | 8-channel analog mux/demux | Analog multiplexing | Exact channels not fully mapped. |
+| IC17 | `74HC138AP` | 3-to-8 decoder | External peripheral decoder | Decodes A10-A12 with A13/A14 and IC1:14 select. |
+| IC20 | `74HC00AP` | Quad NAND | Bus read/OE and select logic | Generates global `/OE` from R/W and E; ROM `/CE` inverter; other signal inverters. |
+| IC21 | `TLC272` | Dual op-amp | Analog conditioning | Package noted as FK in project notes. |
+| IC800 | `SE123` | DIP-24 custom Denso IC | Probable multi-channel output driver / low-side or open-collector style driver | Second SE123 device. |
+| IC001 | `SE134` | 12-pin single-row Denso IC, secondary board | Unknown Denso custom IC | Supply pins known; connected with reset / external board logic. |
+| IC250 | `MP611` | Denso custom IC, secondary board | Unknown interface / logic IC | Supply pins known; connected to A20 / IC001 and SE074 common lines. |
+| IC500 | `151821-0020` / `D151821-0020` | DIP-24 custom IC, secondary board | Same family / behavior as IC6 | Connected to IC3 input buffer via ribbon cable. |
+| IC700 | `SE074` | Denso DIP-16, secondary board | Likely 3-channel injector pre-driver / driver-logic IC | Drives T711/T731/T751 external injector outputs. |
+| IC701 | `SE074` | Denso DIP-16, secondary board | Likely 3-channel injector pre-driver / driver-logic IC | Receives IC7 timer outputs O1/O2/O3 and drives T721/T741/T761 outputs. |
 
-## Daughterboard / Interface Board
+---
 
-| Refdes | Marking / part | Supply pins known | Current role |
-|---|---|---|---|
-| `IC001` | `SE134` | `+5 V` pin 7, GND pin 6, `+12 V` pins 10 and 11 | Denso custom interface IC. Exact function unknown. |
-| `IC250` | `MP611` | `+5 V` pin 12, GND pins 3 and 15 | Denso custom IC. Connected to shared SE074 pins 1/2 through pin 19. |
-| `IC500` | `D151821-0020` | See level shifter notes | Comparator / level shifter, same family as `IC6`. |
-| `IC700` | `SE074` | `+5 V` pin 16, GND pins 3, 8, 14, `+12 V` pin 9 | Likely injector pre-driver / driver logic. |
-| `IC701` | `SE074` | `+5 V` pins 3, 14, 16, GND pin 8, `+12 V` pin 9 | Likely injector pre-driver / driver logic. |
 
-## Clock
+## Notes
 
-| Refdes | Value | Notes |
-|---|---:|---|
-| `X1` | 8 MHz | Main oscillator / crystal. |
-
-## Important Corrections
-
-- `IC4` register select is not the initially assumed order. Current confirmed mapping: `IC4 pin35 RS1 = A0`, `IC4 pin36 RS0 = A1`. This mirrors the apparent PIA register addresses compared to the simple datasheet order.
-- `IC7` register select is normal: `pin10 RS0 = A0`, `pin11 RS1 = A1`, `pin12 RS2 = A2`.
-- `IC7` pins `4`, `7`, and `28` are timer clock inputs and are tied together through `F1` to `IC9 pin5`.
-- `IC20 pin11`, not pin12, is the output of NAND gate 4. Pins `12` and `13` are tied inputs feeding that gate.
+- Denso custom devices (`SE123`, `SE074`, `SE134`, `MP611`, `D151821-0020`) are documented by measured wiring and behavior, not by official datasheets.
+- IC4 and IC7 are standard Hitachi/Motorola-style peripherals, but wiring matters more than textbook assumptions. Naturally, the board chose violence and swapped IC4 register select expectations.

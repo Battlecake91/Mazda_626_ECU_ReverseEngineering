@@ -1,92 +1,47 @@
-# IC6 / IC500 D151821-0020 Level Shifter / Comparator
+# IC6 / IC500 D151821-0020 Comparator and Level Shifter
 
-## Device
+> Working documentation. Not an official Mazda or Denso document. Confidence varies; measured project data has priority over generic internet pinouts.
 
-`IC6` and `IC500` are marked `151821-0020` / `D151821-0020`. Current interpretation is that this is a Denso custom mixed comparator / level-shifter IC, not a simple 10-channel 12 V to 5 V translator.
 
-The part appears to interface external automotive-level signals to 5 V logic.
+## D151821-0020 / IC6 / IC500 Notes
+Likely Denso comparator / 12 V to 5 V level-shifter device, DIP-24.
 
-## Proposed Pinout
+| Pin | Function / Behavior |
+|---:|---|
+| 1 | Vin +12 V |
+| 12 | GND |
+| 24 | Vin +5 V |
+| 2-11 | Outputs 1-10, 5 V logic side |
+| 23 | Input0 / comparator reference / input |
+| 22 | Input1 / comparator input |
+| 21 | Input2 |
+| 20 | Input3 |
+| 19 | Input4 |
+| 18 | Input5 |
+| 17 | Input6 |
+| 16 | Input7 |
+| 15 | Input8 |
+| 14 | Input9 |
+| 13 | Input10 |
 
-| Pin | Function | Notes |
-|---:|---|---|
-| 1 | `Vin +12 V` | 12 V supply / input supply. |
-| 2 | `Out1` | 5 V logic output. Comparator output for pin22 vs pin23 behavior. |
-| 3 | `Out2` | 5 V logic output. |
-| 4 | `Out3` | 5 V logic output. |
-| 5 | `Out4` | 5 V logic output. |
-| 6 | `Out5` | 5 V logic output. |
-| 7 | `Out6` | 5 V logic output. |
-| 8 | `Out7` | 5 V logic output. |
-| 9 | `Out8` | 5 V logic output. |
-| 10 | `Out9` | 5 V logic output. |
-| 11 | `Out10` | 5 V logic output. |
-| 12 | GND | Ground. |
-| 13 | `Input10` | 12 V-detect style input. |
-| 14 | `Input9` | 12 V-detect style input. |
-| 15 | `Input8` | Ground-detect style input. |
-| 16 | `Input7` | Ground-detect style input. |
-| 17 | `Input6` | Ground-detect style input. |
-| 18 | `Input5` | Ground-detect style input. |
-| 19 | `Input4` | Ground-detect style input. |
-| 20 | `Input3` | Ground-detect style input. |
-| 21 | `Input2` | Ground-detect style input. |
-| 22 | `Input1` | Comparator input relative to pin23. |
-| 23 | `Input0 / reference` | Comparator reference / input. |
-| 24 | `Vin +5 V` | 5 V supply. |
+Behavior noted from external source / project validation:
 
-## Behavioral Notes From Source / Tests
+- Output1 Pin 2 is comparator output for Pin22 against Pin23.
+- Pin2 pulls low when Pin22 voltage is lower than Pin23.
+- Pin2 is open / high impedance when Pin22 is higher than Pin23.
+- Outputs2-8 are +5 V with floating input and 0 V when corresponding input is grounded.
+- Outputs9-10 are 0 V with floating input and +5 V when +12 V is applied to corresponding input.
 
-### Output 1 / Comparator Behavior
+---
 
-`Out1` at pin 2 acts as comparator output for pin 22 against pin 23:
 
-| Condition | Pin 2 behavior |
-|---|---|
-| `Pin22 < Pin23` | Pin 2 pulls low / toward GND. |
-| `Pin22 > Pin23` | Pin 2 open / high-impedance. |
+## Usage in This ECU
 
-This implies an open-collector / open-drain style output needing pull-up or external logic interpretation.
+- IC6 is present on the main board.
+- IC500 is on the secondary/interface board and appears to be the same family/device.
+- IC500 outputs are routed through the ribbon cable into IC3, where firmware can read them via the memory-mapped input-port window.
+- IC6 also participates in `Schaltung 1`, where a comparator/status path is inverted through IC20 Gate 2 and fed to IC1 Pin9.
 
-### Outputs 2-8: Ground Detect Behavior
+## Caution
 
-For outputs 2-8 (`pins 3-9`) and corresponding inputs (`pins 21-15`):
-
-| Input state | Output state |
-|---|---|
-| Input floating | `+5 V` logic high. |
-| Input grounded | `0 V` logic low. |
-
-### Outputs 9-10: 12 V Detect Behavior
-
-For outputs 9-10 (`pins 10-11`) and corresponding inputs (`pins 14-13`):
-
-| Input state | Output state |
-|---|---|
-| Input floating | `0 V` logic low. |
-| Input driven to `+12 V` | `+5 V` logic high. |
-
-## IC3 Input Port Relationship
-
-Most `IC3` input-buffer pins are fed from `IC500` outputs:
-
-| IC3 input | Source |
-|---|---|
-| `A0` | Connector `A5` -> `IC500:3` |
-| `A1` | Connector `A4` -> `IC500:7` |
-| `A2` | Connector `B5` -> `IC500:8` |
-| `A3` | Connector `B6` -> `IC500:4` |
-| `A4` | `IC6:8` |
-| `A5` | Connector `B7` -> `IC500:6` |
-| `A6` | Connector `A6` -> `IC500:10` |
-| `A7` | Connector `B9` -> `IC500:11` |
-
-## Important Interpretation
-
-The D151821-0020 should not be modeled as a uniform translator. It contains mixed behavior:
-
-- one comparator channel,
-- multiple ground-detect channels,
-- multiple 12 V-detect channels.
-
-Firmware interpretation of the `IC3` input byte must account for these different polarities.
+This device must not be documented as a simple 10-channel 12 V to 5 V level shifter. Its channels appear to have mixed behavior: comparator output, ground-detect style outputs and +12 V-detect style outputs.

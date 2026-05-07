@@ -1,81 +1,65 @@
 # IC4 HD63BP21P PIA
 
-## Device
+> Working documentation. Not an official Mazda or Denso document. Confidence varies; measured project data has priority over generic internet pinouts.
 
-`IC4` is an `HD63BP21P` parallel interface adapter.
 
-Working address range: `0x2400-0x27FF`.
+## IC4 HD63BP21P PIA Notes
+### Bus / Select
 
-## Register Select Wiring
-
-Important correction: the register-select wiring is mirrored compared with the earlier assumption.
-
-| IC4 pin | PIA signal | Connected address line |
+| IC4 Pin | Signal | Connection / Notes |
 |---:|---|---|
-| 35 | `RS1` | `A0` |
-| 36 | `RS0` | `A1` |
+| 21 | `/R/W` | R/W net, IC20:1, IC1:47 via F3 |
+| 23 | `/CS2` | IC17 `/Y1`, maps IC4 to `0x2400-0x27FF` |
+| 25 | E | E / bus-enable net, IC20:2, IC1:48 via F4 |
+| 26-33 | D7-D0 | Connected to data bus |
+| 35 | RS1 | **A0** |
+| 36 | RS0 | **A1** |
+| 34 | `/RESET` | Shared reset with IC7:8 and external D7 |
+| 40 | CA1 | Hard GND |
+| 37, 38 | n.c. | Not connected |
 
-Therefore the effective register order is:
+### Register Addressing
 
-| Address | Effective `RS1:RS0` | Current interpretation |
-|---:|---:|---|
-| `0x2400` | `00` | Port A / DDRA depending on CRA bit 2. |
-| `0x2401` | `10` | Port B / DDRB depending on CRB bit 2. |
-| `0x2402` | `01` | CRA. |
-| `0x2403` | `11` | CRB. |
+Because IC4 Pin35 RS1 = A0 and Pin36 RS0 = A1, the register order is mirrored compared with the default assumption.
 
-## Bus and Select Pins
+| Address | A1 / RS0 | A0 / RS1 | Effective RS1:RS0 | Interpreted Register |
+|---|---:|---:|---:|---|
+| `0x2400` | 0 | 0 | 00 | Port A / DDRA |
+| `0x2401` | 0 | 1 | 10 | Port B / DDRB |
+| `0x2402` | 1 | 0 | 01 | CRA |
+| `0x2403` | 1 | 1 | 11 | CRB |
 
-| IC4 pin | Signal / connection | Notes |
-|---:|---|---|
-| 21 | `R/W` net | Also `IC10:27`, `IC7:13`, `IC20:1`, through `F3` to `IC1:47`. |
-| 23 | `CS` / select context | Connected to `IC17:14`, corresponding to address range `0x2400-0x27FF`. |
-| 25 | `E` / enable context | Also on bus enable net with `IC10:26`, `IC7:17`, `IC9:11`, `IC20:2`, through `F4` to `IC1:48`. |
-| 34 | `/RESET` | Common reset net with `IC7:8` and external `D7`. |
-| 37, 38 | n.c. | Not connected. |
-| 40 | `CA1` | Hard tied to GND. |
+**Important correction:** A firmware access to `0x2401` Bit7 is therefore not CRA Bit7 / CA1. It is most likely Port B Bit7 = IC4 Pin17, which has R30 pull-up and goes to external A20. IC4 CA1 is Pin40 and is tied hard to GND.
 
-## Known Port / Control Pin Connections
+### IC4 Observed Pin List
 
-The following list is currently the best known `IC4` pin mapping. Interpret against the `HD63BP21P` datasheet when assigning PA/PB/CA/CB functions.
-
-| IC4 pin | Connection |
+| IC4 Pin | Connection / Notes |
 |---:|---|
-| 7 | `R39` pull-up + `R42` pull-down. |
-| 8 | `R38` pull-up + `R41` pull-down. |
-| 9 | `R37` pull-up + `R40` pull-down. |
-| 10 | `R36` pull-up + `IC5:6`. |
-| 11 | `R35` pull-up + `IC5:10`. |
-| 12 | `R34` pull-up + `IC5:8`. |
-| 13 | `R33` pull-up + `IC5:9`. |
-| 14 | `R32` pull-up + `IC5:7`. |
-| 15 | `R31` pull-up + `IC800:7`. |
-| 16 | External `B8`. |
-| 17 | `R30` pull-up + external `A20`. |
-| 18 | GND. |
-| 19 | `R28` pull-down. |
-| 22 | `R26` pull-down. |
-| 24 | `R27` pull-down. |
-| 29 | `R25` pull-down. |
+| 7 | R39 pull-up + R42 pull-down |
+| 8 | R38 pull-up + R41 pull-down |
+| 9 | R37 pull-up + R40 pull-down |
+| 10 | R36 pull-up + IC5:6 |
+| 11 | R35 pull-up + IC5:10 |
+| 12 | R34 pull-up + IC5:8 |
+| 13 | R33 pull-up + IC5:9 |
+| 14 | R32 pull-up + IC5:7 |
+| 15 | R31 pull-up + IC800:7 |
+| 16 | External B8 |
+| 17 | R30 pull-up + external A20 |
+| 18 | GND |
+| 19 | R28 pull-down |
+| 21 | R/W net |
+| 22 | R26 pull-down |
+| 23 | IC17:14 `/Y1` |
+| 24 | R27 pull-down |
+| 29 | R25 pull-down |
+| 34 | `/RESET`, shared with IC7:8 and external D7 |
+| 37, 38 | n.c. |
+| 40 | CA1 hard GND |
 
-## `0x2401 Bit 7` Finding
+---
 
-Earlier analysis considered `0x2401 bit 7` as possibly `CRA bit 7 / CA1 interrupt flag`. That is now considered incorrect.
 
-Because `IC4 RS1/RS0` wiring is mirrored:
+## Key Correction
 
-- `0x2401` corresponds to Port B / DDRB space, not CRA.
-- Bit 7 likely maps to the physical port bit on `IC4 pin17`.
-- `IC4 pin17` is connected to `R30` pull-up and external connector `A20`.
-- `IC4 pin40 CA1` is tied to GND and should not produce an external CA1 event in normal operation.
-
-So any firmware read of `0x2401 bit 7` should be analyzed as an external / pulled-up port input candidate, not as an interrupt flag. Tiny address-bit swap, massive interpretive faceplant. Classic.
-
-## Reset Net
-
-`IC4 pin34 /RESET` is tied to:
-
-- `IC7 pin8 /RESET`
-- External connector `D7`
-
-On the external board, `D7` goes to `IC001:4` (`SE134`, 12-pin single-row Denso IC context). This is likely a shared reset line for PIA and timer, not a PIA-controlled timer control line.
+The important trap is `0x2401`. Because IC4 register select wiring is mirrored, `0x2401 Bit7` should be treated as Port B Bit7 / IC4 Pin17 / external A20 candidate, not as CRA Bit7 / CA1. CA1 is IC4 Pin40 and is tied hard to GND.

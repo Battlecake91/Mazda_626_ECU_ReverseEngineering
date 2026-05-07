@@ -1,73 +1,31 @@
-# Open Questions
+# Open Questions and Next Checks
 
-## MCU / CPU Identity
+> Working documentation. Not an official Mazda or Denso document. Confidence varies; measured project data has priority over generic internet pinouts.
 
-- What exactly is `IC1 = SC402617FN`?
-- Is it a Denso-custom HC11 derivative, a masked Motorola variant, or another compatible MCU?
-- How exactly do the internal RAM / EEPROM / register ranges map on this part?
-- How should the `0xBE40-0xBFFF` boot ROM / vector area from reference material be represented in Ghidra for this ECU?
 
-## Ghidra HC11 Library
+## Open / To Be Confirmed
+| Topic | Current State | Next Useful Action |
+|---|---|---|
+| ROM start address | Likely `0x8000-0xFFFF` for 27C256 | Confirm using reset vector at EPROM offset `0x7FFE/0x7FFF`. |
+| IC3 input bit semantics | Electrical sources known | Determine meaning of IC500/IC6 signals by tracing secondary board / firmware accesses. |
+| F pin output | 330 ohm small low-side driver | Determine whether MIL, diagnostic, or small relay/logical output. |
+| 3G / G distributor functions | Both ignition/distributor-related candidates | Verify exact distributor signal names by harness / oscilloscope. |
+| IC20 Gate 3 / C10 node | Timing/reset/status candidate | Trace external C10 node and IC1:11 behavior. |
+| IC6:22 / Schaltung 1 | IC6 comparator/status path into IC1:9 via IC20 Gate2 | Determine physical input source and firmware meaning. |
+| SE074 logic | Injector pre-driver logic strongly suspected | Determine exact channel/bank/phase behavior between IC7 outputs, IC1 direct lines, IC700/IC701 and injector outputs. |
+| External connector pinout | Working list exists | Continue verifying remaining A/B/2x/3x pins against harness and PCB topology. |
 
-- Add the exact third-party Ghidra HC11 processor / language module repository or release name.
-- Verify instruction decoding against known reset-vector startup code.
+---
 
-## IC20 Glue Logic
 
-- Re-verify `IC20:6 -> IC1:19` because `IC1:19` is also listed as `A10`.
-- Determine the exact role of `IC20` gate 3 around `pins 8/9/10`, `R606`, and `C10`.
-- Confirm the exact net relationship between `IC20:11`, `IC11:20`, and `IC17:4` after correcting NAND gate pin direction.
+## Additional Useful Checks
 
-## IC4 PIA
-
-- Confirm full pin-to-port mapping using the `HD63BP21P` datasheet.
-- Verify population status of `R37`, `R41`, and `R42`, because older BOM notes and current port pull-up/down notes conflict.
-- Determine the external function of connector `A20` connected to `IC4:17`.
-- Confirm how firmware configures Port A / Port B DDR and control registers.
-
-## IC7 Timer
-
-- Measure `IC9:11`, `IC9:9`, and `IC9:5` to determine actual timer clock frequency.
-- Verify pull-up refdes for `C14` and `C15` paths (`R85` / `R86` naming conflict).
-- Identify all firmware writes to timer registers.
-- Determine whether timer channels directly generate injector pulse widths.
-
-## SE074 Injector Driver Hypothesis
-
-- Confirm `IC700` and `IC701` pin numbering / orientation, especially because supply pins appear different between devices.
-- Determine why `IC701` receives timer outputs but `IC700` receives direct MCU lines.
-- Verify injector output mapping using continuity to ECU connector and harness.
-- Resolve whether internal Denso transistor numbering or US wiring diagram injector numbering is correct.
-- Determine function of shared `IC700/IC701 pins 1+2` line and `IC250:19`.
-- Determine function of `IC701:10 -> R825 -> T801` diagnostic / sense path.
-
-## SE123 Devices
-
-- Confirm whether `SE123` pins `14-22` are outputs, inputs, or protected driver pins.
-- Verify channel mirror hypothesis by tracing each logic-side pin to external-side behavior.
-- Determine whether `C4` shared routing between `IC5`, `IC800`, and SE074 context is supply, enable, diagnostic, or output-related.
-
-## D151821-0020 Level Shifters
-
-- Verify all `IC6` and `IC500` input/output channel polarities on the bench.
-- Determine exact reference behavior of comparator pins `22/23` and output pin `2`.
-- Map `IC3_INPUT_PORT` bits to real external vehicle signals.
-
-## Analog Front-End
-
-- Trace `IC13` TC4051 channel inputs and output.
-- Trace `IC21` TLC272 amplifier stages.
-- Identify sensor inputs and scaling networks.
-
-## Capacitors / BOM
-
-- Reconcile connector names such as `C14`, `C15`, `C16`, `C17` with capacitor refdes of same names. This naming collision is a little trap with teeth.
-- Verify all n.f. / n.b. designations before final BOM export.
-- Determine exact values for any parts not covered by the new capacitor and resistor value notes.
-
-## Bus Capture
-
-- Capture external bus cycles with DSLogic Plus.
-- Decode address/data/RW/E/chip-select timing.
-- Build a Python watcher for RAM and memory-mapped I/O accesses.
-- Confirm external address map with real bus captures instead of static tracing only.
+| Topic | Why It Matters | Suggested Check |
+|---|---|---|
+| Exact HC11 Ghidra module name | Reproducible setup | Record local Ghidra processor module repository/release name. |
+| ROM reset vector | Confirms ROM base | Compare EPROM bytes at dump offset `0x7FFE/0x7FFF` with expected vector at CPU `0xFFFE/0xFFFF`. |
+| IC700 vs IC701 injector phasing | Explains 3 timer outputs for 6 injectors | Scope IC7 O1/O2/O3, IC1 direct SE074 lines and injector transistor gates together. |
+| IC3 bit semantics | Turns electrical map into software meaning | Cross-reference firmware reads from `0x2800` with IC500 input tracing. |
+| IC20 Gate 3 / C10 node | Unknown status/timing/reset function | Trace C10 node and observe IC1:11 during reset and runtime. |
+| SE123 exact behavior | Separates driver outputs from status/control pins | Bench-test channels with current limiting or infer from load-side topology. |
+| Connector pin confidence | Needed for final ECU pinout | Continue measuring from connector pins to driver stages and IC pins. |

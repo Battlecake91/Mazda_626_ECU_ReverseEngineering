@@ -1,110 +1,65 @@
-# Ghidra HC11 Setup
+# Ghidra HC11 Firmware Setup
 
-## Goal
+> Working documentation. Not an official Mazda or Denso document. Confidence varies; measured project data has priority over generic internet pinouts.
 
-Use Ghidra to analyze the ECU ROM image as an HC11-like firmware target.
-
-The exact MCU is currently treated as `SC402617FN`, likely Denso-custom or HC11-derived enough for HC11-style disassembly workflows.
 
 ## Processor / Language Module
 
-A third-party Ghidra processor / language module for Motorola `MC68HC11` / `68HC11` was used.
+The firmware analysis is being done in Ghidra using a third-party Motorola 68HC11 / MC68HC11 processor-language module.
 
-Exact library repository / release name: **TODO: add exact source URL or package name**.
+The exact library/repository name still needs to be recorded in the repo once confirmed from the local Ghidra installation or downloaded ZIP. Document it here once known instead of guessing, because fake precision is how bad schematics are born.
 
-Do not replace this with a guessed repository name. Reverse engineering already has enough fiction.
+## Suggested Import Settings
 
-## Import Settings
-
-Recommended working import model:
-
-| Setting | Value / note |
+| Setting | Value / Recommendation |
 |---|---|
-| Architecture | Motorola 68HC11 / HC11-compatible language module. |
-| Endianness | Big-endian for CPU instruction / address interpretation, per HC11 family behavior. |
-| ROM base | `0x8000` for the external `27C256` image. |
-| Vector area | `0xFFC0-0xFFFF`. |
-| Main program ROM | `0x8000-0xFFBF`. |
-| Boot ROM reference | `0xBE40-0xBFFF` appears in MCU reference material, but needs care in this external ROM image. |
+| CPU family | Motorola 68HC11 / HC11-compatible language module |
+| ROM binary base | `0x8000` |
+| ROM block size | 32 KiB for `27C256` |
+| Reset vector check | EPROM dump offset `0x7FFE/0x7FFF` should correspond to CPU vector address `0xFFFE/0xFFFF` |
+| Endianness | Big-endian for HC11-style vectors/opcodes |
+| External peripherals | Mark as volatile, non-executable |
+| External RAM | Mark read/write, non-executable, non-volatile |
+| ROM | Mark read/execute, not writeable |
 
-## Memory Blocks
+## Recommended Memory Blocks
 
-Create or verify memory blocks matching the working map:
+| Block | Start | End | Access |
+|---|---:|---:|---|
+| `MCU_INTERNAL_REGS` | `0x0000` | `0x007F` | R/W, volatile |
+| `MCU_INTERNAL_RAM` | `0x0080` | `0x047F` | R/W |
+| `MCU_INTERNAL_EEPROM` | `0x0D80` | `0x0FFF` | R/W |
+| `IC7_TIMER_BASE` | `0x2000` | `0x23FF` | R/W, volatile |
+| `IC4_PIA_BASE` | `0x2400` | `0x27FF` | R/W, volatile |
+| `IC3_INPUT_PORT` | `0x2800` | `0x2BFF` | R, volatile |
+| `RAM_EXT` | `0x2C00` | `0x2FFF` | R/W |
+| `UNUSED_DECODER_SPACE` | `0x3000` | `0x3FFF` | unmapped / placeholder only |
+| `ROM_EXT` | `0x8000` | `0xFFFF` | R/X |
 
-| Address range | Block name | Type |
-|---:|---|---|
-| `0x0000-0x007F` | `MCU_REGS` | Internal registers. |
-| `0x0080-0x047F` | `INTERNAL_RAM` | Internal RAM. |
-| `0x0D80-0x0FFF` | `INTERNAL_EEPROM` | Internal EEPROM. |
-| `0x1000-0x10FF` | `HC11_REG_MODEL` | Register model / compatibility area used during analysis. |
-| `0x2000-0x23FF` | `IC7_TIMER` | HD63B40P timer. |
-| `0x2400-0x27FF` | `IC4_PIA` | HD63BP21P PIA. |
-| `0x2800-0x2BFF` | `IC3_INPUT_PORT` | 74HC541 input port. |
-| `0x2C00-0x2FFF` | `EXT_RAM_WINDOW` | External SRAM window. |
-| `0x3000-0x3FFF` | `UNUSED_DECODER_RANGE` | Currently unassigned. |
-| `0x8000-0xFFBF` | `ROM` | Program ROM. |
-| `0xFFC0-0xFFFF` | `VECTORS` | Interrupt / reset vectors. |
+## Labeling Practice
 
-## Labeling Strategy
+- Rename meaningful functions, but do not over-label everything too early.
+- Keep generated `SUB_xxxx` names until call context or behavior is reasonably clear.
+- For hardware register accesses, create labels before function names become too speculative.
+- `0x2401 Bit7` should be annotated as IC4 Port B Bit7 / IC4 Pin17 / external A20 candidate, not CRA/CA1.
 
-Use labels for known hardware registers and variables, but avoid over-renaming functions too early.
+## Known Firmware Symbols / Candidates
 
-Practical workflow:
-
-1. Let Ghidra identify code from reset vector and interrupt vectors.
-2. Label hardware address references first.
-3. Label known variable addresses when behavior is clear.
-4. Use function names only when the function's role is understood.
-5. Keep `SUB_xxxx` names where meaning is unknown.
-6. Pressing `F` to create functions is useful where control flow clearly enters code, but do not blindly force functions into data tables.
-
-## Known Labels / Addresses From Current Firmware Work
-
-| Symbol / address | Meaning / note |
+| Symbol / Address | Current Interpretation |
 |---|---|
-| `MEAS_ENABLE_FLAGS_67` | Firmware flag byte at `0x0067`, seen in `BRSET` context. |
-| `DAT_0049` | Variable / flag byte referenced near `0xBF6F`. |
-| `DAT_0192` | Variable loaded near `0xBF78`. |
-| `DAT_019B` | Variable loaded near `0xBF73`. |
-| `DAT_8249` | ROM data byte observed as `0x1F`, loaded near `0xBF7F`. |
-| `0x2401 bit 7` | Now interpreted as likely PIA Port B bit 7 / external `A20`, not CRA/CA1. |
+| `DAT_0049` | Internal RAM/register flag byte seen in `BRCLR` context. |
+| `MEAS_ENABLE_FLAGS_67` | Internal flag byte; bit `0x10` observed in measurement-enable logic. |
+| `DAT_0192` | Internal RAM variable used near measurement/control logic. |
+| `DAT_019B` | Internal RAM variable used near branch/condition logic. |
+| `DAT_8249` | ROM constant / table byte observed as `0x1F`. |
+| `0x2401 Bit7` | IC4 Port B Bit7 candidate, external A20 path. |
 
-Example observed disassembly context:
+## Example Hardware Labels
 
-```asm
-BF6F: BRCLR  DAT_0049, #0x01, LAB_BF78
-BF73: LDAA   DAT_019B
-BF76: BNE    LAB_BF8A
-BF78: LDAA   DAT_0192
-BF7B: BRSET  MEAS_ENABLE_FLAGS_67, #0x10, LAB_BF82
-BF7F: LDAA   DAT_8249   ; observed ROM byte: 0x1F
+```c
+#define IC7_TIMER_BASE        0x2000
+#define IC4_PIA_BASE          0x2400
+#define IC3_INPUT_PORT        0x2800
+#define RAM_EXT_BASE          0x2C00
+#define ROM_EXT_BASE          0x8000
 ```
-
-## Hardware Address Labels
-
-Suggested Ghidra labels:
-
-| Address | Suggested label |
-|---:|---|
-| `0x2000` | `IC7_TIMER_BASE` |
-| `0x2400` | `IC4_PIA_BASE` |
-| `0x2400` | `IC4_PORTA_OR_DDRA` |
-| `0x2401` | `IC4_PORTB_OR_DDRB` |
-| `0x2402` | `IC4_CRA` |
-| `0x2403` | `IC4_CRB` |
-| `0x2800` | `IC3_INPUT_PORT` |
-| `0x2C00` | `EXT_RAM_BASE` |
-
-Because of the mirrored `IC4` register select wiring, use the labels above rather than generic PIA datasheet order.
-
-## Decompiler Caveats
-
-The decompiler may produce misleading output when:
-
-- RAM/register overlays are not modeled correctly,
-- hardware registers are treated as normal RAM,
-- vector tables or jump tables are misidentified,
-- memory-mapped I/O reads have side effects,
-- port/DDRx switching in PIA control registers changes register meaning.
-
-For I/O-heavy firmware, the disassembly is often more trustworthy than decompiled C.

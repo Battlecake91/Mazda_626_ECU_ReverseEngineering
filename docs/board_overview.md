@@ -1,61 +1,43 @@
 # Board Overview
 
-## Scope
+> Working documentation. Not an official Mazda or Denso document. Confidence varies; measured project data has priority over generic internet pinouts.
 
-These notes describe the known hardware structure of the KLDE / KL05 Denso ECU assembly currently under reverse engineering.
 
-The board set consists of at least the main ECU logic board and a secondary interface / power-stage related board. The secondary board carries additional Denso custom ICs and transistor output stages. The exact official name of the daughterboard is unknown.
-
-## Identifiers
-
-| Identifier | Meaning / location | Confidence |
+## Identification
+| Item | Marking / Part Number | Notes |
 |---|---|---|
-| `U2103136866B` | Control unit identifier. | Confirmed marking. |
-| `KL05` | Remaining readable part of the ECU marking. Other serial / part number text is damaged. | Confirmed marking. |
-| `079721-3521` | Denso / PCB / subassembly number on the interface or power-stage related board. | Confirmed marking. |
+| ECU / Control Unit | `U2103136866B` | Control unit identification found on the ECU. |
+| ECU family / readable marking | `KL05` | Only `KL05` is still readable on the ECU label. Remaining serial / part number is scratched and unreadable. |
+| PCB / sub-board / interface board | `079721-3521` | Likely Denso / PCB / sub-board number for switching stages, voltage dividers, interface or secondary board circuitry. |
+| Vehicle / engine context | Mazda 626 KLDE | KL-series V6 ECU, likely European KL05 variant. |
 
-## Main Board ICs
+---
 
-| Refdes | Device / marking | Current interpretation |
+
+## System Summary
+
+The ECU appears to be a KL-series V6 control unit with a main custom MCU (`SC402617FN`), external SRAM, EPROM, parallel I/O, timer/counter peripheral, glue logic and a secondary/interface board containing Denso custom ICs.
+
+The current documentation treats the readable ECU family as `KL05`. The remaining ECU label data is damaged, so all variant-specific conclusions should remain cautious until compared against known KL05/KLDE ECU variants.
+
+## Main Functional Blocks
+
+| Block | Main Parts | Current Interpretation |
 |---|---|---|
-| `IC1` | `SC402617FN` | Main MCU or custom MCU, HC11-like external bus context. |
-| `IC3` | `74HC541` | 8-bit input buffer / input port mapped to external data bus. |
-| `IC4` | `HD63BP21P` | PIA, mapped at `0x2400-0x27FF`. |
-| `IC5` | `SE123` | Denso custom multi-channel driver / interface IC. |
-| `IC6` | `151821-0020` / `D151821-0020` | Denso comparator / 12 V to 5 V level shifter with mixed channel behavior. |
-| `IC7` | `HD63B40P` | Programmable timer, mapped at `0x2000-0x23FF`. |
-| `IC8` | `74HC595` | Serial-in / parallel-out latch or output expansion. |
-| `IC9` | `74HC74AP` | Dual D flip-flop used as a two-stage clock divider for `IC7`. |
-| `IC10` | `TC5564APL` | External SRAM. |
-| `IC11` | `27C256` | External EPROM / ROM. |
-| `IC13` | `TC4051BP` | Analog multiplexer. |
-| `IC17` | `74HC138AP` | Address decoder for external peripheral / RAM windows. |
-| `IC20` | `74HC00AP` | NAND glue logic, including global read `/OE` generation. |
-| `IC21` | `TLC272` | Dual operational amplifier. |
-| `IC800` | `SE123` | Second Denso custom multi-channel driver / interface IC. |
-| `X1` | 8 MHz crystal | MCU clock source. |
+| CPU / control core | IC1 `SC402617FN`, X1 8 MHz | Main controller with external memory/peripheral bus. |
+| Program memory | IC11 `27C256` | 32 KiB EPROM, probably mapped at `0x8000-0xFFFF`. |
+| RAM | IC10 `TC5564APL` | External SRAM, decoded into `0x2C00-0x2FFF` window. |
+| Peripheral decode | IC17 `74HC138`, IC20 `74HC00` | Address decode and read/ROM-enable glue logic. |
+| Input status port | IC3 `74HC541`, IC6/IC500 `D151821-0020` | Memory-mapped input buffer from level shifter/comparator paths. |
+| Parallel I/O | IC4 `HD63BP21P` | PIA at `0x2400-0x27FF`; corrected register order. |
+| Timer outputs | IC7 `HD63B40P`, IC9 `74HC74` | Timer selected at `0x2000-0x23FF`, clocked by divided bus-enable clock. |
+| Output drivers | IC5/IC800 `SE123`, IC700/IC701 `SE074` | Low-side / injector driver logic, still partly inferred. |
 
-## Daughterboard / Interface Board ICs
+## Clock / Oscillator
+| RefDes | Value / Marking | Type | Notes |
+|---|---|---|---|
+| X1 | 8 MHz | Crystal | Main clock crystal. |
+| C1 | 40 pF | 0805 C0G | Likely crystal load capacitor. |
+| C2 | 40 pF | 0805 C0G | Likely crystal load capacitor. |
 
-| Refdes | Marking | Current interpretation |
-|---|---|---|
-| `IC001` | `SE134` | Denso custom interface IC. Function unknown. |
-| `IC250` | `MP611` | Denso custom interface IC. Function unknown. |
-| `IC500` | `151821-0020` / `D151821-0020` | Same family / function as `IC6`, used for level shifting / comparator inputs. |
-| `IC700` | `SE074` | Likely 3-channel injector pre-driver / driver logic. |
-| `IC701` | `SE074` | Likely 3-channel injector pre-driver / driver logic. |
-
-## Key Working Assumptions
-
-1. `IC1` provides an external 8-bit data bus and at least 15 external address lines.
-2. `IC17` decodes external peripheral address windows.
-3. `IC20` combines bus control signals and creates an active-low read output-enable signal shared by RAM, ROM, and the `IC3` input port.
-4. `IC7` timer output pins are routed to external connector signals and then into `SE074` circuitry on the secondary board.
-5. `SE074` devices likely interface the ECU timer / MCU control signals to six injector transistor stages.
-6. The US wiring diagram injector numbering is currently treated as less reliable than internal Denso component numbering (`T711`, `T721`, ... `T761`).
-
-## Documentation Rules
-
-- Measurements outrank guesses.
-- Datasheet pin names are used where the package pinout is known.
-- Conflicting old assumptions are explicitly marked instead of silently removed, because otherwise the same mistake comes back wearing a fake mustache.
+---
