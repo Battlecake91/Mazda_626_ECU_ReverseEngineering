@@ -27,6 +27,7 @@ This repository collects the current working notes for reverse engineering a Maz
 | [`docs/secondary_board.md`](docs/secondary_board.md) | Secondary-board Denso IC supply pins and known interconnects. |
 | [`docs/ghidra_hc11_setup.md`](docs/ghidra_hc11_setup.md) | Ghidra setup notes for HC11-style firmware analysis. |
 | [`docs/firmware_analysis.md`](docs/firmware_analysis.md) | Current firmware labels, variables and analysis notes. |
+| [`docs/firmware_findings_from_related_images.md`](docs/firmware_findings_from_related_images.md) | Contributed: findings from disassembling this image alongside related KL / KF images (register block, port bits, analog channels, tables, checksum). |
 | [`docs/open_questions.md`](docs/open_questions.md) | Unresolved topics and next useful checks. |
 
 ## Current High-Level Model
